@@ -1,12 +1,17 @@
 package dev.akhilnarang.smsforwarder.work
 
 import dev.akhilnarang.smsforwarder.data.DeliveryStatus
+import dev.akhilnarang.smsforwarder.data.DestinationEntity
+import dev.akhilnarang.smsforwarder.data.DestinationRepository
+import dev.akhilnarang.smsforwarder.data.DestinationDao
 import dev.akhilnarang.smsforwarder.data.ForwardRecordEntity
 import dev.akhilnarang.smsforwarder.data.ForwardRecordGateway
 import dev.akhilnarang.smsforwarder.network.ForwardClientInterface
 import dev.akhilnarang.smsforwarder.network.ForwardResult
 import dev.akhilnarang.smsforwarder.settings.AppSettings
 import dev.akhilnarang.smsforwarder.settings.SettingsGateway
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
@@ -22,67 +27,84 @@ class ForwardWorkExecutorTest {
             receivedAtEpochMs = 1000L,
             subscriptionId = null,
             multipart = false,
+            destinationId = 1L,
             payloadJson = "{}",
             status = DeliveryStatus.PENDING,
             statusReason = "test",
-            lastError = null,
+            responseDetails = null,
+        )
+
+    private val baseDestination = 
+        DestinationEntity(
+            id = 1L,
+            label = "Test",
+            type = dev.akhilnarang.smsforwarder.data.DestinationType.CUSTOM_WEBHOOK,
+            endpointUrl = "http://example.com"
         )
 
     private fun makeExecutor(
         record: ForwardRecordEntity? = baseRecord,
+        destination: DestinationEntity? = baseDestination,
         claimResult: Boolean = true,
-        forwardResult: ForwardResult = ForwardResult.Success,
-        maxRetries: Int = ForwardWorkExecutor.MAX_AUTOMATIC_RETRY_ATTEMPTS,
+        forwardResult: ForwardResult = ForwardResult.Success("OK"),
     ): Pair<ForwardWorkExecutor, RecordingGateway> {
         val gateway = RecordingGateway(record, claimResult)
         val client = object : ForwardClientInterface {
-            override suspend fun forward(record: ForwardRecordEntity, settings: AppSettings): ForwardResult =
-                forwardResult
+            override suspend fun forward(
+                record: ForwardRecordEntity,
+                settings: AppSettings
+            ): ForwardResult = forwardResult
         }
         val settings = object : SettingsGateway {
             override fun currentSettings(): AppSettings = AppSettings()
         }
-        return ForwardWorkExecutor(gateway, settings, client, maxRetries) to gateway
+        val destDao = object : DestinationDao {
+            override fun getAll(): Flow<List<DestinationEntity>> = flowOf()
+            override suspend fun getById(id: Long): DestinationEntity? = destination
+            override suspend fun insert(destination: DestinationEntity): Long = 1L
+            override suspend fun update(destination: DestinationEntity) {}
+            override suspend fun delete(destination: DestinationEntity) {}
+        }
+        val destRepo = DestinationRepository(destDao)
+        return ForwardWorkExecutor(gateway, settings, client, destRepo) to gateway
     }
 
     @Test
     fun `success path marks record sent`() = runTest {
-        val (executor, gateway) = makeExecutor(forwardResult = ForwardResult.Success)
+        val (executor, gateway) = makeExecutor(forwardResult = ForwardResult.Success("OK"))
         assertEquals(ForwardWorkExecutor.WorkResult.SUCCESS, executor.execute(1L, 0))
         assertEquals(DeliveryStatus.SENT, gateway.lastStatusSet)
     }
 
     @Test
-    fun `permanent failure marks record failed and returns SUCCESS`() = runTest {
+    fun `permanent failure marks record failed and returns FAILURE`() = runTest {
         val (executor, gateway) = makeExecutor(forwardResult = ForwardResult.PermanentFailure("403"))
-        assertEquals(ForwardWorkExecutor.WorkResult.SUCCESS, executor.execute(1L, 0))
+        assertEquals(ForwardWorkExecutor.WorkResult.FAILURE, executor.execute(1L, 0))
         assertEquals(DeliveryStatus.FAILED, gateway.lastStatusSet)
     }
 
     @Test
     fun `retryable failure below limit returns RETRY and marks RETRYING`() = runTest {
         val (executor, gateway) = makeExecutor(
-            forwardResult = ForwardResult.RetryableFailure("timeout"),
-            maxRetries = 5,
+            forwardResult = ForwardResult.RetryableFailure("timeout")
         )
         assertEquals(ForwardWorkExecutor.WorkResult.RETRY, executor.execute(1L, 0))
         assertEquals(DeliveryStatus.RETRYING, gateway.lastStatusSet)
     }
 
     @Test
-    fun `retryable failure at attempt limit marks FAILED and returns SUCCESS`() = runTest {
+    fun `retryable failure at attempt limit marks FAILED and returns FAILURE`() = runTest {
         val (executor, gateway) = makeExecutor(
-            forwardResult = ForwardResult.RetryableFailure("timeout"),
-            maxRetries = 5,
+            forwardResult = ForwardResult.RetryableFailure("timeout")
         )
-        assertEquals(ForwardWorkExecutor.WorkResult.SUCCESS, executor.execute(1L, 4))
+        assertEquals(ForwardWorkExecutor.WorkResult.FAILURE, executor.execute(1L, 5))
         assertEquals(DeliveryStatus.FAILED, gateway.lastStatusSet)
     }
 
     @Test
-    fun `unclaimed record returns SUCCESS without forwarding`() = runTest {
+    fun `unclaimed record returns FAILURE without forwarding`() = runTest {
         val (executor, gateway) = makeExecutor(claimResult = false)
-        assertEquals(ForwardWorkExecutor.WorkResult.SUCCESS, executor.execute(1L, 0))
+        assertEquals(ForwardWorkExecutor.WorkResult.FAILURE, executor.execute(1L, 0))
         assertNull(gateway.lastStatusSet)
     }
 
@@ -103,7 +125,7 @@ private class RecordingGateway(
 
     override suspend fun getById(id: Long): ForwardRecordEntity? = record
 
-    override suspend fun markSent(id: Long, sentAtEpochMs: Long) {
+    override suspend fun markSent(id: Long, sentAtEpochMs: Long, responseDetails: String?) {
         lastStatusSet = DeliveryStatus.SENT
     }
 

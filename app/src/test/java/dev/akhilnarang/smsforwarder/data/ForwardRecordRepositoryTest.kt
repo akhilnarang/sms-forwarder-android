@@ -62,7 +62,7 @@ class ForwardRecordRepositoryTest {
     fun `markSent transitions record to SENT status`() = runTest {
         val id = insertPending()
         repo.markSendingIfEligible(id, 1000L)
-        repo.markSent(id, 2000L)
+        repo.markSent(id, 2000L, "OK")
         val record = repo.getById(id)!!
         assertEquals(DeliveryStatus.SENT, record.status)
         assertEquals(2000L, record.sentAtEpochMs)
@@ -75,7 +75,7 @@ class ForwardRecordRepositoryTest {
         repo.markFailed(id, "connection refused")
         val record = repo.getById(id)!!
         assertEquals(DeliveryStatus.FAILED, record.status)
-        assertEquals("connection refused", record.lastError)
+        assertEquals("connection refused", record.responseDetails)
     }
 
     @Test
@@ -85,7 +85,7 @@ class ForwardRecordRepositoryTest {
         repo.markRetrying(id, "timeout")
         val record = repo.getById(id)!!
         assertEquals(DeliveryStatus.RETRYING, record.status)
-        assertEquals("timeout", record.lastError)
+        assertEquals("timeout", record.responseDetails)
     }
 
     @Test
@@ -96,7 +96,7 @@ class ForwardRecordRepositoryTest {
         repo.markPending(id)
         val record = repo.getById(id)!!
         assertEquals(DeliveryStatus.PENDING, record.status)
-        assertNull(record.lastError)
+        assertNull(record.responseDetails)
     }
 
     @Test

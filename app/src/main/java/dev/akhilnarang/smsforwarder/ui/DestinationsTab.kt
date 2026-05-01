@@ -148,7 +148,7 @@ private fun AddDestinationDialog(
     onDismiss: () -> Unit,
     onAdd: (String, DestinationType, String, String, String, String, String) -> Unit
 ) {
-    val defaultPayload = "{\n  \"sender\": \"{{sender}}\",\n  \"body\": \"{{body}}\"\n}"
+    val defaultPayload = "{\n  \"sender\": \"{{sender}}\",\n  \"body\": \"{{body}}\",\n  \"received_at\": \"{{received_at}}\"\n}"
     
     var label by rememberSaveable { mutableStateOf(initialDestination?.label ?: "") }
     var type by rememberSaveable { mutableStateOf(initialDestination?.type ?: DestinationType.CUSTOM_WEBHOOK) }
@@ -290,7 +290,7 @@ private fun AddDestinationDialog(
                                         }
                                     }
                                 }
-                                Text("Keys: {{sender}}, {{body}}")
+                                Text("Keys: {{sender}}, {{body}}, {{received_at}}")
                             }
                         }
                     )
@@ -316,7 +316,7 @@ private fun AddDestinationDialog(
                         minLines = 2,
                         maxLines = 6,
                         supportingText = { 
-                            Text("Supports HTML tags (e.g. <b>, <i>, <code>). Keys: {{sender}}, {{body}}")
+                            Text("Supports HTML tags (e.g. <b>, <i>, <code>). Keys: {{sender}}, {{body}}, {{received_at}}")
                         }
                     )
                 }

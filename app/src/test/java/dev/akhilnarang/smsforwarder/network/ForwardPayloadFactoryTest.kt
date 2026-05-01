@@ -36,7 +36,7 @@ class ForwardPayloadFactoryTest {
         val keys = json.parseToJsonElement(payloadJson).jsonObject.keys
 
         assertEquals(
-            setOf("sender", "body"),
+            setOf("sender", "body", "received_at"),
             keys,
         )
     }

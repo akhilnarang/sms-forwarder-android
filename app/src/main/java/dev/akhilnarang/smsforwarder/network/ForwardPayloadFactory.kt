@@ -19,14 +19,22 @@ data class ForwardPayload(
 class ForwardPayloadFactory {
     private val json = Json { encodeDefaults = true }
 
-    fun createJson(incomingSms: IncomingSms): String =
-        json.encodeToString(
+    fun createJson(incomingSms: IncomingSms, customKeysMap: Map<String, String> = emptyMap()): String {
+        val baseString = json.encodeToString(
             ForwardPayload(
                 sender = incomingSms.senderRaw,
                 body = incomingSms.body,
                 receivedAt = Instant.ofEpochMilli(incomingSms.receivedAtEpochMs).toString()
             ),
         )
+        if (customKeysMap.isEmpty()) return baseString
+
+        val obj = JSONObject(baseString)
+        for ((key, value) in customKeysMap) {
+            obj.put(key, value)
+        }
+        return obj.toString()
+    }
         
     fun createCustomJson(template: String, incomingSms: IncomingSms, customKeysMap: Map<String, String>): String {
         val receivedAtIso = Instant.ofEpochMilli(incomingSms.receivedAtEpochMs).toString()

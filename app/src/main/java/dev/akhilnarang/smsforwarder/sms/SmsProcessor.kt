@@ -30,6 +30,16 @@ class SmsProcessor(
                     matchedRule = rule
                     destinationId = rule.destinationId
                     
+                    var customKeysMap: Map<String, String> = emptyMap()
+                    rule.customPayloadKeys?.let {
+                        try {
+                            val json = JSONObject(it)
+                            val map = mutableMapOf<String, String>()
+                            json.keys().forEach { key -> map[key] = json.getString(key) }
+                            customKeysMap = map
+                        } catch (e: Exception) {}
+                    }
+                    
                     // Retrieve destination to check for custom payload template
                     val destination = destinationDao.getById(rule.destinationId)
                     if (destination != null) {
@@ -38,7 +48,7 @@ class SmsProcessor(
                                 val config = JSONObject(destination.configJson ?: "{}")
                                 val chatId = config.optString("chatId", "")
                                 val template = if (!destination.payloadTemplate.isNullOrBlank()) destination.payloadTemplate else "<b>From:</b> {{sender}}\n\n{{body}}"
-                                val textStr = payloadFactory.createTextTemplate(template, incomingSms, emptyMap())
+                                val textStr = payloadFactory.createTextTemplate(template, incomingSms, customKeysMap)
                                 val json = JSONObject()
                                 json.put("chat_id", chatId)
                                 json.put("text", textStr)
@@ -46,17 +56,12 @@ class SmsProcessor(
                                 payloadJson = json.toString()
                             } catch (e: Exception) { }
                         } else if (!destination.payloadTemplate.isNullOrBlank()) {
-                            var customKeysMap: Map<String, String> = emptyMap()
-                            rule.customPayloadKeys?.let {
-                                try {
-                                    val json = JSONObject(it)
-                                    val map = mutableMapOf<String, String>()
-                                    json.keys().forEach { key -> map[key] = json.getString(key) }
-                                    customKeysMap = map
-                                } catch (e: Exception) {}
-                            }
                             payloadJson = payloadFactory.createCustomJson(destination.payloadTemplate, incomingSms, customKeysMap)
+                        } else {
+                            payloadJson = payloadFactory.createJson(incomingSms, customKeysMap)
                         }
+                    } else {
+                        payloadJson = payloadFactory.createJson(incomingSms, customKeysMap)
                     }
                     break
                 }

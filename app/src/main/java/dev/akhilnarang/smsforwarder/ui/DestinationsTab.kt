@@ -94,7 +94,7 @@ internal fun DestinationsTab(
                 ListItem(
                     headlineContent = { Text(dest.label, fontWeight = FontWeight.SemiBold) },
                     overlineContent = { Text(dest.type.name) },
-                    supportingContent = { Text(dest.endpointUrl) },
+                    supportingContent = { Text(if (dest.type == DestinationType.TELEGRAM_PRESET) "Telegram Bot" else dest.endpointUrl) },
                     trailingContent = {
                         Switch(
                             checked = dest.enabled,
@@ -148,17 +148,40 @@ private fun AddDestinationDialog(
     onDismiss: () -> Unit,
     onAdd: (String, DestinationType, String, String, String, String, String) -> Unit
 ) {
-    val defaultPayload = "{\n  \"sender\": \"{{sender}}\",\n  \"body\": \"{{body}}\",\n  \"received_at\": \"{{receivedAt}}\"\n}"
+    val defaultPayload = "{\n  \"sender\": \"{{sender}}\",\n  \"body\": \"{{body}}\"\n}"
     
     var label by rememberSaveable { mutableStateOf(initialDestination?.label ?: "") }
     var type by rememberSaveable { mutableStateOf(initialDestination?.type ?: DestinationType.CUSTOM_WEBHOOK) }
     var endpointUrl by rememberSaveable { mutableStateOf(initialDestination?.endpointUrl ?: "") }
     var authName by rememberSaveable { mutableStateOf(initialDestination?.authHeaderName ?: "") }
     var authVal by rememberSaveable { mutableStateOf(initialDestination?.authHeaderValue ?: "") }
-    var payloadTemplate by rememberSaveable { mutableStateOf(initialDestination?.payloadTemplate ?: if (initialDestination == null) defaultPayload else "") }
+    var payloadTemplate by rememberSaveable { 
+        mutableStateOf(
+            initialDestination?.payloadTemplate ?: if (initialDestination == null && type == DestinationType.CUSTOM_WEBHOOK) defaultPayload else ""
+        ) 
+    }
     
-    var botToken by rememberSaveable { mutableStateOf("") }
-    var chatId by rememberSaveable { mutableStateOf("") }
+    // Automatically switch default payload when the destination type changes (only for new destinations)
+    LaunchedEffect(type) {
+        if (initialDestination == null) {
+            payloadTemplate = if (type == DestinationType.CUSTOM_WEBHOOK) defaultPayload else ""
+        }
+    }
+    
+    var botToken by rememberSaveable { 
+        mutableStateOf(
+            try {
+                if (initialDestination?.configJson != null) JSONObject(initialDestination.configJson).optString("botToken", "") else ""
+            } catch (e: Exception) { "" }
+        ) 
+    }
+    var chatId by rememberSaveable { 
+        mutableStateOf(
+            try {
+                if (initialDestination?.configJson != null) JSONObject(initialDestination.configJson).optString("chatId", "") else ""
+            } catch (e: Exception) { "" }
+        ) 
+    }
 
     var expanded by rememberSaveable { mutableStateOf(false) }
 
@@ -267,7 +290,7 @@ private fun AddDestinationDialog(
                                         }
                                     }
                                 }
-                                Text("Keys: {{sender}}, {{body}}, {{receivedAt}}")
+                                Text("Keys: {{sender}}, {{body}}")
                             }
                         }
                     )
@@ -284,13 +307,29 @@ private fun AddDestinationDialog(
                         label = { Text("Chat ID") },
                         modifier = Modifier.fillMaxWidth()
                     )
+                    OutlinedTextField(
+                        value = payloadTemplate,
+                        onValueChange = { payloadTemplate = it },
+                        label = { Text("Message Template (Optional)") },
+                        placeholder = { Text("<b>From:</b> {{sender}}\\n\\n{{body}}") },
+                        modifier = Modifier.fillMaxWidth(),
+                        minLines = 2,
+                        maxLines = 6,
+                        supportingText = { 
+                            Text("Supports HTML tags (e.g. <b>, <i>, <code>). Keys: {{sender}}, {{body}}")
+                        }
+                    )
                 }
             }
         },
         confirmButton = {
             Button(
                 onClick = {
-                    onAdd(label, type, endpointUrl, authName, authVal, payloadTemplate, "{\"botToken\":\"$botToken\",\"chatId\":\"$chatId\"}")
+                    val finalEndpoint = if (type == dev.akhilnarang.smsforwarder.data.DestinationType.TELEGRAM_PRESET) {
+                        "https://api.telegram.org/bot${botToken}/sendMessage"
+                    } else endpointUrl
+
+                    onAdd(label, type, finalEndpoint, authName, authVal, payloadTemplate, "{\"botToken\":\"$botToken\",\"chatId\":\"$chatId\"}")
                 }
             ) {
                 Text("Save")

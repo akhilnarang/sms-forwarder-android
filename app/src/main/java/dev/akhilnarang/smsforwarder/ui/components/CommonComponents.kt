@@ -84,10 +84,10 @@ internal fun RecordDetailDialog(
                     record.sentAtEpochMs?.let {
                         Text("Sent at: ${formatTimestamp(it)}")
                     }
-                    record.lastError?.let {
+                    record.responseDetails?.let {
                         Text(
-                            text = "Last error: $it",
-                            color = MaterialTheme.colorScheme.error,
+                            text = "Response / Error: $it",
+                            color = if (record.status == dev.akhilnarang.smsforwarder.data.DeliveryStatus.FAILED) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant,
                         )
                     }
                     HorizontalDivider()

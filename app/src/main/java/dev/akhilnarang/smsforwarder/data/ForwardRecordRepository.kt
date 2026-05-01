@@ -16,6 +16,7 @@ class ForwardRecordRepository(
     suspend fun insertIncoming(
         incomingSms: IncomingSms,
         matchedRule: ForwardingRuleEntity?,
+        destinationId: Long?,
         payloadJson: String,
     ): Long =
         dao.insert(
@@ -27,16 +28,18 @@ class ForwardRecordRepository(
                 subscriptionId = incomingSms.subscriptionId,
                 multipart = incomingSms.multipart,
                 payloadJson = payloadJson,
+                destinationId = destinationId,
                 status = if (matchedRule != null) DeliveryStatus.PENDING else DeliveryStatus.IGNORED,
                 statusReason = matchedRule?.let { "Matched rule: ${it.label}" }
                     ?: "Rule not matched",
-                lastError = null,
+                responseDetails = null,
             ),
         )
 
     suspend fun insertManualIncoming(
         incomingSms: IncomingSms,
         matchedRule: ForwardingRuleEntity?,
+        destinationId: Long?,
         payloadJson: String,
     ): Long =
         dao.insert(
@@ -48,10 +51,11 @@ class ForwardRecordRepository(
                 subscriptionId = incomingSms.subscriptionId,
                 multipart = incomingSms.multipart,
                 payloadJson = payloadJson,
+                destinationId = destinationId,
                 status = DeliveryStatus.PENDING,
                 statusReason = matchedRule?.let { "Manually forwarded from device SMS: ${it.label}" }
                     ?: "Manually forwarded from device SMS inbox",
-                lastError = null,
+                responseDetails = null,
             ),
         )
 
@@ -77,7 +81,7 @@ class ForwardRecordRepository(
                 payloadJson = payloadJson,
                 status = DeliveryStatus.PENDING,
                 statusReason = "Manually enqueued via in-app validation helper",
-                lastError = null,
+                responseDetails = null,
                 isTestRecord = true,
             ),
         )
@@ -105,7 +109,7 @@ class ForwardRecordRepository(
         )
     }
 
-    override suspend fun markSent(id: Long, sentAtEpochMs: Long) {
-        dao.markSent(id = id, sentAtEpochMs = sentAtEpochMs)
+    override suspend fun markSent(id: Long, sentAtEpochMs: Long, responseDetails: String?) {
+        dao.markSent(id = id, sentAtEpochMs = sentAtEpochMs, responseDetails = responseDetails)
     }
 }

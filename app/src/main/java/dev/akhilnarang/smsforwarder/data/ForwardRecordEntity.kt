@@ -1,5 +1,6 @@
 package dev.akhilnarang.smsforwarder.data
 
+import androidx.room.ColumnInfo
 import androidx.room.Entity
 import androidx.room.Index
 import androidx.room.PrimaryKey
@@ -19,10 +20,11 @@ data class ForwardRecordEntity(
     val payloadJson: String,
     val status: DeliveryStatus,
     val statusReason: String,
-    val lastError: String?,
+    @ColumnInfo(name = "lastError") val responseDetails: String?,
     val attemptCount: Int = 0,
     val lastAttemptedAtEpochMs: Long? = null,
     val sentAtEpochMs: Long? = null,
+    val destinationId: Long? = null,
     /** True for records created via the in-app validation helper, not from a real incoming SMS. */
     val isTestRecord: Boolean = false,
 )

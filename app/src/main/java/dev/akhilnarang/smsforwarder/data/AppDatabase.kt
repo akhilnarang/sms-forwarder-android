@@ -9,7 +9,7 @@ import androidx.sqlite.db.SupportSQLiteDatabase
 
 @Database(
     entities = [DestinationEntity::class, ForwardingRuleEntity::class, ForwardRecordEntity::class],
-    version = 3,
+    version = 4,
     exportSchema = true,
 )
 @TypeConverters(AppDatabaseConverters::class)
@@ -24,6 +24,15 @@ abstract class AppDatabase : RoomDatabase() {
                 override fun migrate(db: SupportSQLiteDatabase) {
                     db.execSQL(
                         "ALTER TABLE forward_records ADD COLUMN isTestRecord INTEGER NOT NULL DEFAULT 0",
+                    )
+                }
+            }
+
+        val MIGRATION_3_4: Migration =
+            object : Migration(3, 4) {
+                override fun migrate(db: SupportSQLiteDatabase) {
+                    db.execSQL(
+                        "ALTER TABLE forward_records ADD COLUMN destinationId INTEGER DEFAULT NULL",
                     )
                 }
             }

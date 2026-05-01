@@ -84,11 +84,11 @@ internal fun QueueTab(
                                     text = record.statusReason,
                                     style = MaterialTheme.typography.bodySmall,
                                 )
-                                record.lastError?.let { lastError ->
+                                record.responseDetails?.let { responseDetails ->
                                     Text(
-                                        text = "Last error: $lastError",
+                                        text = if (record.status == dev.akhilnarang.smsforwarder.data.DeliveryStatus.FAILED) "Error: $responseDetails" else "Response: $responseDetails",
                                         style = MaterialTheme.typography.bodySmall,
-                                        color = MaterialTheme.colorScheme.error,
+                                        color = if (record.status == dev.akhilnarang.smsforwarder.data.DeliveryStatus.FAILED) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant,
                                     )
                                 }
                             }

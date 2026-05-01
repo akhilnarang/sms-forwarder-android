@@ -73,7 +73,9 @@ class SmsForwardClient : ForwardClientInterface {
             try {
                 client.newCall(request).execute().use { response ->
                     if (response.isSuccessful) {
-                        return@withContext ForwardResult.Success
+                        val responseBody = response.body?.string()?.trim()?.take(MAX_ERROR_RESPONSE_CHARS).orEmpty()
+                        val details = if (responseBody.isNotEmpty()) "Server returned ${response.code}: $responseBody" else "Server returned ${response.code}"
+                        return@withContext ForwardResult.Success(details)
                     }
 
                     val responseSummary =
@@ -126,7 +128,7 @@ class SmsForwardClient : ForwardClientInterface {
 }
 
 sealed interface ForwardResult {
-    data object Success : ForwardResult
+    data class Success(val responseDetails: String?) : ForwardResult
     data class RetryableFailure(val message: String) : ForwardResult
     data class PermanentFailure(val message: String) : ForwardResult
 }

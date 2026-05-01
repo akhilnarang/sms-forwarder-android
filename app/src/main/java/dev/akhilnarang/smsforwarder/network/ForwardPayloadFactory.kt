@@ -24,13 +24,36 @@ class ForwardPayloadFactory {
         )
         
     fun createCustomJson(template: String, incomingSms: IncomingSms, customKeysMap: Map<String, String>): String {
-        var result = template
-        result = result.replace("{{sender}}", JSONObject.quote(incomingSms.senderRaw).removeSurrounding("\""))
-        result = result.replace("{{body}}", JSONObject.quote(incomingSms.body).removeSurrounding("\""))
-        result = result.replace("{{receivedAt}}", incomingSms.receivedAtEpochMs.toString())
+        val replacements = mutableMapOf(
+            "sender" to JSONObject.quote(incomingSms.senderRaw).removeSurrounding("\""),
+            "body" to JSONObject.quote(incomingSms.body).removeSurrounding("\""),
+            "receivedAt" to incomingSms.receivedAtEpochMs.toString()
+        )
         for ((key, value) in customKeysMap) {
-            result = result.replace("{{" + key + "}}", JSONObject.quote(value).removeSurrounding("\""))
+            replacements[key] = JSONObject.quote(value).removeSurrounding("\"")
         }
-        return result
+
+        val regex = Regex("\\{\\{([^{}]+)\\}\\}")
+        return regex.replace(template) { matchResult ->
+            val key = matchResult.groupValues[1]
+            replacements[key] ?: matchResult.value
+        }
+    }
+
+    fun createTextTemplate(template: String, incomingSms: IncomingSms, customKeysMap: Map<String, String>): String {
+        val replacements = mutableMapOf(
+            "sender" to incomingSms.senderRaw,
+            "body" to incomingSms.body,
+            "receivedAt" to incomingSms.receivedAtEpochMs.toString()
+        )
+        for ((key, value) in customKeysMap) {
+            replacements[key] = value
+        }
+
+        val regex = Regex("\\{\\{([^{}]+)\\}\\}")
+        return regex.replace(template) { matchResult ->
+            val key = matchResult.groupValues[1]
+            replacements[key] ?: matchResult.value
+        }
     }
 }

@@ -1,8 +1,10 @@
 package dev.akhilnarang.smsforwarder.ui
 
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
@@ -13,6 +15,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.Send
 import androidx.compose.material.icons.rounded.Clear
 import androidx.compose.material.icons.rounded.SearchOff
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.Icon
@@ -20,26 +23,36 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.ListItem
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import dev.akhilnarang.smsforwarder.data.DestinationEntity
 import dev.akhilnarang.smsforwarder.sms.IncomingSms
 
 @Composable
 internal fun DeviceSmsTab(
     hasReadSmsPermission: Boolean,
     messages: List<IncomingSms>,
+    destinations: List<DestinationEntity>,
     searchQuery: String,
     onRequestSmsPermissions: () -> Unit,
     onLoadDeviceSms: () -> Unit,
     onSearchQueryChange: (String) -> Unit,
-    onForwardSms: (IncomingSms) -> Unit,
+    onForwardSms: (IncomingSms, DestinationEntity) -> Unit,
 ) {
+    var smsToForward by remember { mutableStateOf<IncomingSms?>(null) }
+
     if (!hasReadSmsPermission) {
         Column(
             modifier = Modifier
@@ -119,49 +132,95 @@ internal fun DeviceSmsTab(
                         },
                 )
             }
-            return
-        }
-
-        LazyColumn(
-            modifier = Modifier.fillMaxSize(),
-            verticalArrangement = Arrangement.spacedBy(12.dp),
-        ) {
-            items(
-                items = messages,
-                key = { message ->
-                    "${message.receivedAtEpochMs}-${message.senderNormalized}-${message.body.hashCode()}"
-                },
-            ) { message ->
-                Card {
-                    ListItem(
-                        headlineContent = {
-                            Text(
-                                text = message.senderRaw,
-                                fontWeight = FontWeight.SemiBold,
-                            )
-                        },
-                        overlineContent = {
-                            Text(formatTimestamp(message.receivedAtEpochMs))
-                        },
-                        supportingContent = {
-                            Text(
-                                text = message.body,
-                                maxLines = 2,
-                                overflow = TextOverflow.Ellipsis,
-                            )
-                        },
-                        trailingContent = {
-                            IconButton(onClick = { onForwardSms(message) }) {
-                                Icon(
-                                    imageVector = Icons.AutoMirrored.Rounded.Send,
-                                    contentDescription = "Queue message for forwarding",
-                                    tint = MaterialTheme.colorScheme.primary,
+        } else {
+            LazyColumn(
+                modifier = Modifier.fillMaxSize(),
+                verticalArrangement = Arrangement.spacedBy(12.dp),
+            ) {
+                items(
+                    items = messages,
+                    key = { message ->
+                        "${message.receivedAtEpochMs}-${message.senderNormalized}-${message.body.hashCode()}"
+                    },
+                ) { message ->
+                    Card {
+                        ListItem(
+                            headlineContent = {
+                                Text(
+                                    text = message.senderRaw,
+                                    fontWeight = FontWeight.SemiBold,
                                 )
-                            }
-                        },
-                    )
+                            },
+                            overlineContent = {
+                                Text(formatTimestamp(message.receivedAtEpochMs))
+                            },
+                            supportingContent = {
+                                Text(
+                                    text = message.body,
+                                    maxLines = 2,
+                                    overflow = TextOverflow.Ellipsis,
+                                )
+                            },
+                            trailingContent = {
+                                IconButton(onClick = { smsToForward = message }) {
+                                    Icon(
+                                        imageVector = Icons.AutoMirrored.Rounded.Send,
+                                        contentDescription = "Queue message for forwarding",
+                                        tint = MaterialTheme.colorScheme.primary,
+                                    )
+                                }
+                            },
+                        )
+                    }
                 }
             }
         }
+    }
+
+    smsToForward?.let { message ->
+        AlertDialog(
+            onDismissRequest = { smsToForward = null },
+            title = { Text("Select Destination") },
+            text = {
+                if (destinations.isEmpty()) {
+                    Text("No destinations configured. Please add a destination first.")
+                } else {
+                    LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        items(destinations) { dest ->
+                            Surface(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clickable {
+                                        onForwardSms(message, dest)
+                                        smsToForward = null
+                                    },
+                                shape = MaterialTheme.shapes.small,
+                                color = MaterialTheme.colorScheme.surfaceVariant,
+                            ) {
+                                Row(
+                                    modifier = Modifier.padding(16.dp),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Column {
+                                        Text(text = dest.label, fontWeight = FontWeight.SemiBold)
+                                        Text(
+                                            text = if (dest.type == dev.akhilnarang.smsforwarder.data.DestinationType.TELEGRAM_PRESET) "Telegram Bot" else dest.endpointUrl, 
+                                            style = MaterialTheme.typography.bodySmall, 
+                                            maxLines = 1, 
+                                            overflow = TextOverflow.Ellipsis
+                                        )
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = { smsToForward = null }) {
+                    Text("Cancel")
+                }
+            }
+        )
     }
 }

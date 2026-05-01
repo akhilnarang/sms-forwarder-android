@@ -172,6 +172,7 @@ fun SmsForwarderScreen(
                             DeviceSmsTab(
                                 hasReadSmsPermission = hasReadSmsPermission,
                                 messages = uiState.deviceSmsMessages,
+                                destinations = uiState.destinations,
                                 searchQuery = uiState.smsSearchQuery,
                                 onRequestSmsPermissions = onRequestSmsPermissions,
                                 onLoadDeviceSms = { viewModel.loadDeviceSms(500) },

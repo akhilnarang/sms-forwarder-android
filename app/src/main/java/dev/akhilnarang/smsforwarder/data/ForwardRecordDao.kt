@@ -61,7 +61,7 @@ interface ForwardRecordDao {
         """
         UPDATE forward_records
         SET status = :status,
-            lastError = NULL,
+            lastError = :responseDetails,
             sentAtEpochMs = :sentAtEpochMs
         WHERE id = :id
         """,
@@ -69,6 +69,7 @@ interface ForwardRecordDao {
     suspend fun markSent(
         id: Long,
         sentAtEpochMs: Long,
+        responseDetails: String?,
         status: DeliveryStatus = DeliveryStatus.SENT,
     )
 

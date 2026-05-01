@@ -68,6 +68,17 @@ class SmsForwarderViewModel(
             val feedbackMessage = args[5] as String?
             val deviceSmsMessages = args[6] as List<IncomingSms>
             val smsSearchQuery = args[7] as String
+            
+            val filteredDeviceSms = if (smsSearchQuery.isBlank()) {
+                deviceSmsMessages
+            } else {
+                val lowercaseQuery = smsSearchQuery.lowercase()
+                deviceSmsMessages.filter { message ->
+                    message.senderRaw.lowercase().contains(lowercaseQuery) ||
+                        message.senderNormalized.lowercase().contains(lowercaseQuery)
+                }
+            }
+            
             SmsForwarderUiState(
                 rules = rules,
                 destinations = destinations,
@@ -75,7 +86,7 @@ class SmsForwarderViewModel(
                 forwardSummary = summary,
                 settings = settings,
                 feedbackMessage = feedbackMessage,
-                deviceSmsMessages = deviceSmsMessages,
+                deviceSmsMessages = filteredDeviceSms,
                 smsSearchQuery = smsSearchQuery
             )
         }.stateIn(

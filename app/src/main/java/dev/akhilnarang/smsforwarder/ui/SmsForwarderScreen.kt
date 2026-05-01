@@ -8,7 +8,16 @@ import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.windowInsetsPadding
+import androidx.compose.foundation.pager.HorizontalPager
+import androidx.compose.foundation.pager.rememberPagerState
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.rounded.Assessment
+import androidx.compose.material.icons.rounded.List
+import androidx.compose.material.icons.rounded.PhoneAndroid
+import androidx.compose.material.icons.rounded.Rule
+import androidx.compose.material.icons.rounded.Send
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.Icon
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.ScrollableTabRow
 import androidx.compose.material3.SnackbarHost
@@ -19,15 +28,16 @@ import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import dev.akhilnarang.smsforwarder.data.ForwardRecordEntity
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.unit.dp
+import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -39,8 +49,17 @@ fun SmsForwarderScreen(
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     val snackbarHostState = remember { SnackbarHostState() }
-    var selectedTabIndex by rememberSaveable { mutableIntStateOf(0) }
     var selectedRecord by remember { mutableStateOf<ForwardRecordEntity?>(null) }
+    val coroutineScope = rememberCoroutineScope()
+    
+    val tabs = listOf(
+        "Destinations" to Icons.Rounded.Send,
+        "Rules" to Icons.Rounded.Rule,
+        "Queue" to Icons.Rounded.List,
+        "Summary" to Icons.Rounded.Assessment,
+        "Device SMS" to Icons.Rounded.PhoneAndroid
+    )
+    val pagerState = rememberPagerState(pageCount = { tabs.size })
 
     LaunchedEffect(uiState.feedbackMessage) {
         val message = uiState.feedbackMessage ?: return@LaunchedEffect
@@ -66,58 +85,67 @@ fun SmsForwarderScreen(
                 .navigationBarsPadding(),
         ) {
             ScrollableTabRow(
-                selectedTabIndex = selectedTabIndex,
+                selectedTabIndex = pagerState.currentPage,
                 edgePadding = 8.dp,
             ) {
-                listOf("Settings", "Senders", "Queue", "Summary", "Device SMS").forEachIndexed { index, label ->
+                tabs.forEachIndexed { index, (label, icon) ->
                     Tab(
-                        selected = selectedTabIndex == index,
-                        onClick = { selectedTabIndex = index },
+                        selected = pagerState.currentPage == index,
+                        onClick = {
+                            coroutineScope.launch {
+                                pagerState.animateScrollToPage(index)
+                            }
+                        },
                         text = { Text(label) },
+                        icon = { Icon(icon, contentDescription = label) }
                     )
                 }
             }
 
-            Box(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(horizontal = 16.dp, vertical = 12.dp),
-            ) {
-                when (selectedTabIndex) {
-                    0 ->
-                        SettingsTab(
-                            currentState = uiState,
-                            hasReceiveSmsPermission = hasReceiveSmsPermission,
-                            hasReadSmsPermission = hasReadSmsPermission,
-                            onRequestSmsPermissions = onRequestSmsPermissions,
-                            onSaveSettings = { url, name, value, connect, read ->
-                                viewModel.saveSettings(url, name, value, connect, read)
-                            },
-                        )
-                    1 ->
-                        SendersTab(
-                            senders = uiState.senders,
-                            onAddSender = viewModel::addSender,
-                            onSetSenderEnabled = viewModel::setSenderEnabled,
-                            onDeleteSender = viewModel::deleteSender,
-                        )
-                    2 ->
-                        QueueTab(
-                            records = uiState.records,
-                            onRetryRecord = viewModel::retryRecord,
-                            onOpenRecord = { selectedRecord = it },
-                        )
-                    3 -> SummaryTab(summary = uiState.summary)
-                    else ->
-                        DeviceSmsTab(
-                            hasReadSmsPermission = hasReadSmsPermission,
-                            messages = uiState.deviceSmsMessages,
-                            searchQuery = uiState.smsSearchQuery,
-                            onRequestSmsPermissions = onRequestSmsPermissions,
-                            onLoadDeviceSms = viewModel::loadDeviceSms,
-                            onSearchQueryChange = viewModel::updateSmsSearchQuery,
-                            onForwardSms = viewModel::manuallyForwardSms,
-                        )
+            HorizontalPager(
+                state = pagerState,
+                modifier = Modifier.fillMaxSize(),
+            ) { page ->
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .padding(horizontal = 16.dp, vertical = 12.dp),
+                ) {
+                    when (page) {
+                        0 ->
+                            DestinationsTab(
+                                destinations = uiState.destinations,
+                                onAddDestination = viewModel::addDestination,
+                                onSetDestinationEnabled = viewModel::setDestinationEnabled,
+                                onDeleteDestination = viewModel::deleteDestination,
+                            )
+                        1 ->
+                            RulesTab(
+                                rules = uiState.rules,
+                                destinations = uiState.destinations,
+                                onAddRule = viewModel::addRule,
+                                onSetRuleEnabled = viewModel::setRuleEnabled,
+                                onDeleteRule = viewModel::deleteRule,
+                                onUpdateRulePriority = viewModel::updateRulePriority,
+                            )
+                        2 ->
+                            QueueTab(
+                                records = uiState.forwardRecords,
+                                onRetryRecord = { viewModel.resendRecord(it) },
+                                onOpenRecord = { selectedRecord = it },
+                            )
+                        3 -> SummaryTab(summary = uiState.forwardSummary)
+                        else ->
+                            DeviceSmsTab(
+                                hasReadSmsPermission = hasReadSmsPermission,
+                                messages = uiState.deviceSmsMessages,
+                                searchQuery = uiState.smsSearchQuery,
+                                onRequestSmsPermissions = onRequestSmsPermissions,
+                                onLoadDeviceSms = { viewModel.loadDeviceSms(500) },
+                                onSearchQueryChange = viewModel::updateSmsSearchQuery,
+                                onForwardSms = viewModel::manuallyForwardSms,
+                            )
+                    }
                 }
             }
         }

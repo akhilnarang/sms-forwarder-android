@@ -148,12 +148,14 @@ private fun AddDestinationDialog(
     onDismiss: () -> Unit,
     onAdd: (String, DestinationType, String, String, String, String, String) -> Unit
 ) {
+    val defaultPayload = "{\n  \"sender\": \"{{sender}}\",\n  \"body\": \"{{body}}\",\n  \"received_at\": \"{{receivedAt}}\"\n}"
+    
     var label by rememberSaveable { mutableStateOf(initialDestination?.label ?: "") }
     var type by rememberSaveable { mutableStateOf(initialDestination?.type ?: DestinationType.CUSTOM_WEBHOOK) }
     var endpointUrl by rememberSaveable { mutableStateOf(initialDestination?.endpointUrl ?: "") }
     var authName by rememberSaveable { mutableStateOf(initialDestination?.authHeaderName ?: "") }
     var authVal by rememberSaveable { mutableStateOf(initialDestination?.authHeaderValue ?: "") }
-    var payloadTemplate by rememberSaveable { mutableStateOf(initialDestination?.payloadTemplate ?: "") }
+    var payloadTemplate by rememberSaveable { mutableStateOf(initialDestination?.payloadTemplate ?: if (initialDestination == null) defaultPayload else "") }
     
     var botToken by rememberSaveable { mutableStateOf("") }
     var chatId by rememberSaveable { mutableStateOf("") }

@@ -13,6 +13,9 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.foundation.background
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.AnnotatedString
@@ -50,13 +53,12 @@ internal fun DestinationsTab(
                 body = "Tap the + button to add a Webhook or Telegram Bot.",
             )
         } else {
-            Column(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .verticalScroll(rememberScrollState()),
+            LazyColumn(
+                modifier = Modifier.fillMaxSize(),
+                contentPadding = PaddingValues(bottom = 80.dp),
                 verticalArrangement = Arrangement.spacedBy(12.dp)
             ) {
-                destinations.forEach { dest ->
+                items(destinations, key = { it.id }) { dest ->
                     val dismissState = rememberSwipeToDismissBoxState(
                         confirmValueChange = { value ->
                             if (value == SwipeToDismissBoxValue.EndToStart || value == SwipeToDismissBoxValue.StartToEnd) {
@@ -104,7 +106,6 @@ internal fun DestinationsTab(
         }
                     )
                 }
-                Spacer(modifier = Modifier.height(80.dp))
             }
         }
 
@@ -147,29 +148,19 @@ private fun AddDestinationDialog(
     onDismiss: () -> Unit,
     onAdd: (String, DestinationType, String, String, String, String, String) -> Unit
 ) {
-    var label by remember { mutableStateOf(initialDestination?.label ?: "") }
-    var type by remember { mutableStateOf(initialDestination?.type ?: DestinationType.CUSTOM_WEBHOOK) }
-    var endpointUrl by remember { mutableStateOf(initialDestination?.endpointUrl ?: "") }
-    var authName by remember { mutableStateOf(initialDestination?.authHeaderName ?: "") }
-    var authVal by remember { mutableStateOf(initialDestination?.authHeaderValue ?: "") }
-    var payloadTemplate by remember { mutableStateOf(initialDestination?.payloadTemplate ?: "") }
+    var label by rememberSaveable { mutableStateOf(initialDestination?.label ?: "") }
+    var type by rememberSaveable { mutableStateOf(initialDestination?.type ?: DestinationType.CUSTOM_WEBHOOK) }
+    var endpointUrl by rememberSaveable { mutableStateOf(initialDestination?.endpointUrl ?: "") }
+    var authName by rememberSaveable { mutableStateOf(initialDestination?.authHeaderName ?: "") }
+    var authVal by rememberSaveable { mutableStateOf(initialDestination?.authHeaderValue ?: "") }
+    var payloadTemplate by rememberSaveable { mutableStateOf(initialDestination?.payloadTemplate ?: "") }
     
-    var botToken by remember { mutableStateOf("") }
-    var chatId by remember { mutableStateOf("") }
+    var botToken by rememberSaveable { mutableStateOf("") }
+    var chatId by rememberSaveable { mutableStateOf("") }
 
-    LaunchedEffect(initialDestination) {
-        initialDestination?.configJson?.let {
-            try {
-                val json = JSONObject(it)
-                if (json.has("botToken")) botToken = json.getString("botToken")
-                if (json.has("chatId")) chatId = json.getString("chatId")
-            } catch (e: Exception) {}
-        }
-    }
+    var expanded by rememberSaveable { mutableStateOf(false) }
 
-    var expanded by remember { mutableStateOf(false) }
-
-    var isJsonValid by remember { mutableStateOf(true) }
+    var isJsonValid by rememberSaveable { mutableStateOf(true) }
     LaunchedEffect(payloadTemplate) {
         if (payloadTemplate.isBlank()) {
             isJsonValid = true

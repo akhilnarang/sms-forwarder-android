@@ -34,6 +34,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -150,13 +151,14 @@ private fun AddRuleDialog(
     onDismiss: () -> Unit,
     onSave: (ForwardingRuleEntity) -> Unit
 ) {
-    var label by remember { mutableStateOf(initialRule?.label ?: "") }
-    var senderPattern by remember { mutableStateOf(initialRule?.senderPattern ?: "") }
-    var bodyContains by remember { mutableStateOf(initialRule?.bodyContains ?: "") }
+    var label by rememberSaveable { mutableStateOf(initialRule?.label ?: "") }
+    var senderPattern by rememberSaveable { mutableStateOf(initialRule?.senderPattern ?: "") }
+    var bodyContains by rememberSaveable { mutableStateOf(initialRule?.bodyContains ?: "") }
+    // Note: DestinationEntity isn't Saveable natively, so keeping remember for selectedDestination
     var selectedDestination by remember { mutableStateOf(destinations.find { it.id == initialRule?.destinationId } ?: destinations.firstOrNull()) }
-    var expanded by remember { mutableStateOf(false) }
+    var expanded by rememberSaveable { mutableStateOf(false) }
 
-    var customKeysStr by remember { mutableStateOf(initialRule?.customPayloadKeys ?: "") }
+    var customKeysStr by rememberSaveable { mutableStateOf(initialRule?.customPayloadKeys ?: "") }
 
     AlertDialog(
         onDismissRequest = onDismiss,

@@ -253,18 +253,19 @@ private fun AddDestinationDialog(
                             capitalization = KeyboardCapitalization.None
                         ),
                         supportingText = { 
-                            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
                                 if (payloadTemplate.isNotBlank()) {
-                                    if (isJsonValid) {
-                                        Icon(Icons.Rounded.CheckCircle, contentDescription = "Valid JSON", modifier = Modifier.size(16.dp), tint = Color(0xFF4CAF50))
-                                        Text("Valid JSON format", color = Color(0xFF4CAF50))
-                                    } else {
-                                        Icon(Icons.Rounded.ErrorOutline, contentDescription = "Invalid JSON", modifier = Modifier.size(16.dp), tint = MaterialTheme.colorScheme.error)
-                                        Text("Invalid JSON format", color = MaterialTheme.colorScheme.error)
+                                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                                        if (isJsonValid) {
+                                            Icon(Icons.Rounded.CheckCircle, contentDescription = "Valid JSON", modifier = Modifier.size(16.dp), tint = Color(0xFF4CAF50))
+                                            Text("Valid JSON format", color = Color(0xFF4CAF50))
+                                        } else {
+                                            Icon(Icons.Rounded.ErrorOutline, contentDescription = "Invalid JSON", modifier = Modifier.size(16.dp), tint = MaterialTheme.colorScheme.error)
+                                            Text("Invalid JSON format", color = MaterialTheme.colorScheme.error)
+                                        }
                                     }
-                                } else {
-                                    Text("Use {{sender}}, {{body}}, {{receivedAt}}")
                                 }
+                                Text("Keys: {{sender}}, {{body}}, {{receivedAt}}")
                             }
                         }
                     )

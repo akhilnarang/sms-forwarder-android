@@ -48,9 +48,31 @@ class ForwardPayloadFactory {
         }
 
         val regex = Regex("\\{\\{([^{}]+)\\}\\}")
-        return regex.replace(template) { matchResult ->
+        val replacedTemplate = regex.replace(template) { matchResult ->
             val key = matchResult.groupValues[1]
             replacements[key] ?: matchResult.value
+        }
+        
+        if (customKeysMap.isEmpty()) return replacedTemplate
+
+        return try {
+            val obj = JSONObject(replacedTemplate)
+            for ((key, value) in customKeysMap) {
+                // If it's not already in the template, append it
+                if (!obj.has(key)) {
+                    // Try to parse the value as JSON (e.g. number/boolean) or fallback to string
+                    try {
+                        val parsedVal = org.json.JSONTokener(value).nextValue()
+                        obj.put(key, parsedVal)
+                    } catch (e: Exception) {
+                        obj.put(key, value)
+                    }
+                }
+            }
+            obj.toString(2)
+        } catch (e: Exception) {
+            // If template isn't valid JSON (e.g. malformed), just return the replaced string
+            replacedTemplate
         }
     }
 

@@ -184,6 +184,13 @@ class SmsForwarderViewModel(
         _smsSearchQuery.value = query
     }
 
+    fun clearQueue() {
+        viewModelScope.launch {
+            recordRepository.clearAll()
+            _feedbackMessage.value = "Queue cleared"
+        }
+    }
+
     fun manuallyForwardSms(sms: IncomingSms, rule: dev.akhilnarang.smsforwarder.data.ForwardingRuleEntity) {
         viewModelScope.launch {
             val destination = destinationRepository.getDestinationById(rule.destinationId)

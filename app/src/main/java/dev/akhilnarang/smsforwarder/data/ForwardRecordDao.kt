@@ -73,6 +73,9 @@ interface ForwardRecordDao {
         status: DeliveryStatus = DeliveryStatus.SENT,
     )
 
+    @Query("DELETE FROM forward_records")
+    suspend fun deleteAll()
+
     @Query(
         """
         SELECT

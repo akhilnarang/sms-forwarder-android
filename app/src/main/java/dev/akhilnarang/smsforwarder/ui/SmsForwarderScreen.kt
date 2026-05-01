@@ -166,6 +166,7 @@ fun SmsForwarderScreen(
                                 records = uiState.forwardRecords,
                                 onRetryRecord = { viewModel.resendRecord(it) },
                                 onOpenRecord = { selectedRecord = it },
+                                onClearQueue = viewModel::clearQueue,
                             )
                         3 -> SummaryTab(summary = uiState.forwardSummary)
                         else ->

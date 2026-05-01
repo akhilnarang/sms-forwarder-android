@@ -33,6 +33,7 @@ internal fun QueueTab(
     records: List<ForwardRecordEntity>,
     onRetryRecord: (ForwardRecordEntity) -> Unit,
     onOpenRecord: (ForwardRecordEntity) -> Unit,
+    onClearQueue: () -> Unit,
 ) {
     if (records.isEmpty()) {
         EmptyState(
@@ -47,6 +48,16 @@ internal fun QueueTab(
         modifier = Modifier.fillMaxSize(),
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
+        item {
+            androidx.compose.foundation.layout.Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.End
+            ) {
+                TextButton(onClick = onClearQueue) {
+                    Text("Clear Queue")
+                }
+            }
+        }
         items(records, key = { it.id }) { record ->
             Card(
                 modifier = Modifier

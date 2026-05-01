@@ -13,6 +13,8 @@ class ForwardRecordRepository(
 
     override suspend fun getById(id: Long): ForwardRecordEntity? = dao.getById(id)
 
+    suspend fun clearAll() = dao.deleteAll()
+
     suspend fun insertIncoming(
         incomingSms: IncomingSms,
         matchedRule: ForwardingRuleEntity?,

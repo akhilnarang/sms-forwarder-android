@@ -3,14 +3,14 @@ package dev.akhilnarang.smsforwarder.ui
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
-import androidx.lifecycle.viewmodel.initializer
-import androidx.lifecycle.viewmodel.viewModelFactory
-import dev.akhilnarang.smsforwarder.AppContainer
-import dev.akhilnarang.smsforwarder.data.ConfiguredSenderEntity
+import dev.akhilnarang.smsforwarder.data.DestinationEntity
+import dev.akhilnarang.smsforwarder.data.DestinationRepository
+import dev.akhilnarang.smsforwarder.data.DestinationType
 import dev.akhilnarang.smsforwarder.data.ForwardRecordEntity
 import dev.akhilnarang.smsforwarder.data.ForwardRecordRepository
 import dev.akhilnarang.smsforwarder.data.ForwardSummary
-import dev.akhilnarang.smsforwarder.data.ConfiguredSenderRepository
+import dev.akhilnarang.smsforwarder.data.ForwardingRuleEntity
+import dev.akhilnarang.smsforwarder.data.ForwardingRuleRepository
 import dev.akhilnarang.smsforwarder.network.ForwardPayloadFactory
 import dev.akhilnarang.smsforwarder.settings.AppSettings
 import dev.akhilnarang.smsforwarder.settings.SettingsRepository
@@ -25,184 +25,204 @@ import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 
 data class SmsForwarderUiState(
+    val rules: List<ForwardingRuleEntity> = emptyList(),
+    val destinations: List<DestinationEntity> = emptyList(),
+    val forwardRecords: List<ForwardRecordEntity> = emptyList(),
+    val forwardSummary: ForwardSummary = ForwardSummary(),
     val settings: AppSettings = AppSettings(),
-    val senders: List<ConfiguredSenderEntity> = emptyList(),
-    val records: List<ForwardRecordEntity> = emptyList(),
-    val deviceSmsMessages: List<IncomingSms> = emptyList(),
-    val smsSearchQuery: String = "",
-    val summary: ForwardSummary = ForwardSummary(),
     val feedbackMessage: String? = null,
+    val deviceSmsMessages: List<IncomingSms> = emptyList(),
+    val smsSearchQuery: String = ""
 )
 
 class SmsForwarderViewModel(
+    private val ruleRepository: ForwardingRuleRepository,
+    private val destinationRepository: DestinationRepository,
+    private val recordRepository: ForwardRecordRepository,
     private val settingsRepository: SettingsRepository,
-    private val senderRepository: ConfiguredSenderRepository,
-    private val forwardRecordRepository: ForwardRecordRepository,
-    private val workScheduler: ForwardWorkScheduler,
-    private val payloadFactory: ForwardPayloadFactory,
     private val deviceSmsScanner: DeviceSmsScanner,
+    private val payloadFactory: ForwardPayloadFactory,
+    private val workScheduler: ForwardWorkScheduler,
 ) : ViewModel() {
-    private val feedbackMessage = MutableStateFlow<String?>(null)
-    private val deviceSmsList = MutableStateFlow<List<IncomingSms>>(emptyList())
-    private val smsSearchQuery = MutableStateFlow("")
 
-    private val filteredDeviceSms =
-        combine(deviceSmsList, smsSearchQuery) { messages, query ->
-            val normalizedQuery = query.trim()
-            if (normalizedQuery.isBlank()) {
-                messages
-            } else {
-                val lowercaseQuery = normalizedQuery.lowercase()
-                messages.filter { message ->
-                    message.senderRaw.lowercase().contains(lowercaseQuery) ||
-                        message.senderNormalized.lowercase().contains(lowercaseQuery)
-                }
-            }
-        }
-
-    private val baseUiState =
-        combine(
-            settingsRepository.observeSettings(),
-            senderRepository.observeAll(),
-            forwardRecordRepository.observeAll(),
-            forwardRecordRepository.observeSummary(),
-            feedbackMessage,
-        ) { settings, senders, records, summary, message ->
-            SmsForwarderUiState(
-                settings = settings,
-                senders = senders,
-                records = records,
-                summary = summary,
-                feedbackMessage = message,
-            )
-        }
+    private val _feedbackMessage = MutableStateFlow<String?>(null)
+    private val _deviceSmsMessages = MutableStateFlow<List<IncomingSms>>(emptyList())
+    private val _smsSearchQuery = MutableStateFlow("")
 
     val uiState: StateFlow<SmsForwarderUiState> =
         combine(
-            baseUiState,
-            filteredDeviceSms,
-            smsSearchQuery,
-        ) { baseUiState, deviceSmsMessages, smsSearchQueryValue ->
-            baseUiState.copy(
+            ruleRepository.getAllRules(),
+            destinationRepository.getAllDestinations(),
+            recordRepository.observeAll(),
+            recordRepository.observeSummary(),
+            settingsRepository.observeSettings(),
+            _feedbackMessage,
+            _deviceSmsMessages,
+            _smsSearchQuery
+        ) { args ->
+            val rules = args[0] as List<ForwardingRuleEntity>
+            val destinations = args[1] as List<DestinationEntity>
+            val records = args[2] as List<ForwardRecordEntity>
+            val summary = args[3] as ForwardSummary
+            val settings = args[4] as AppSettings
+            val feedbackMessage = args[5] as String?
+            val deviceSmsMessages = args[6] as List<IncomingSms>
+            val smsSearchQuery = args[7] as String
+            SmsForwarderUiState(
+                rules = rules,
+                destinations = destinations,
+                forwardRecords = records,
+                forwardSummary = summary,
+                settings = settings,
+                feedbackMessage = feedbackMessage,
                 deviceSmsMessages = deviceSmsMessages,
-                smsSearchQuery = smsSearchQueryValue,
+                smsSearchQuery = smsSearchQuery
             )
         }.stateIn(
             scope = viewModelScope,
-            started = SharingStarted.WhileSubscribed(5_000),
+            started = SharingStarted.WhileSubscribed(5000),
             initialValue = SmsForwarderUiState(),
         )
 
-    fun saveSettings(
-        endpointUrl: String,
-        authHeaderName: String,
-        authHeaderValue: String,
-        connectTimeoutSeconds: Int,
-        readTimeoutSeconds: Int,
-    ) {
+    fun clearFeedbackMessage() {
+        _feedbackMessage.value = null
+    }
+
+    fun updateSettings(settings: AppSettings) {
+        settingsRepository.saveSettings(
+            endpointUrl = settings.endpointUrl,
+            authHeaderName = settings.authHeaderName,
+            authHeaderValue = settings.authHeaderValue,
+            connectTimeoutSeconds = settings.connectTimeoutSeconds,
+            readTimeoutSeconds = settings.readTimeoutSeconds
+        )
+        _feedbackMessage.value = "Settings saved successfully"
+    }
+
+    // Destinations
+    fun addDestination(destination: DestinationEntity) {
         viewModelScope.launch {
-            try {
-                settingsRepository.saveSettings(
-                    endpointUrl,
-                    authHeaderName,
-                    authHeaderValue,
-                    connectTimeoutSeconds,
-                    readTimeoutSeconds,
-                )
-                feedbackMessage.value = "Settings saved."
-            } catch (error: IllegalArgumentException) {
-                feedbackMessage.value = error.message
-            }
+            destinationRepository.addDestination(destination)
         }
     }
 
-    fun addSender(
-        label: String,
-        rawSender: String,
-    ) {
+    fun updateDestination(destination: DestinationEntity) {
         viewModelScope.launch {
-            try {
-                senderRepository.addSender(label, rawSender)
-                feedbackMessage.value = "Sender added."
-            } catch (error: IllegalArgumentException) {
-                feedbackMessage.value = error.message
-            }
+            destinationRepository.updateDestination(destination)
         }
     }
 
-    fun setSenderEnabled(
-        sender: ConfiguredSenderEntity,
-        enabled: Boolean,
-    ) {
+    fun deleteDestination(destination: DestinationEntity) {
         viewModelScope.launch {
-            senderRepository.setEnabled(sender, enabled)
-            feedbackMessage.value = if (enabled) "Sender enabled." else "Sender disabled."
+            destinationRepository.deleteDestination(destination)
         }
     }
 
-    fun deleteSender(id: Long) {
+    fun setDestinationEnabled(destination: DestinationEntity, enabled: Boolean) {
         viewModelScope.launch {
-            senderRepository.deleteSender(id)
-            feedbackMessage.value = "Sender removed."
+            destinationRepository.updateDestination(destination.copy(enabled = enabled))
         }
     }
 
-    fun retryRecord(id: Long) {
+    // Rules
+    fun addRule(rule: ForwardingRuleEntity) {
         viewModelScope.launch {
-            forwardRecordRepository.markPending(id)
-            workScheduler.retryNow(id)
-            feedbackMessage.value = "Retry scheduled."
+            ruleRepository.addRule(rule)
         }
     }
 
-    fun loadDeviceSms() {
+    fun updateRule(rule: ForwardingRuleEntity) {
         viewModelScope.launch {
-            try {
-                deviceSmsList.value = deviceSmsScanner.getRecentSms()
-            } catch (_: SecurityException) {
-                feedbackMessage.value = "READ_SMS permission is required to load device SMS."
-            } catch (_: Exception) {
-                feedbackMessage.value = "Unable to load device SMS right now."
-            }
+            ruleRepository.updateRule(rule)
+        }
+    }
+
+    fun deleteRule(rule: ForwardingRuleEntity) {
+        viewModelScope.launch {
+            ruleRepository.deleteRule(rule)
+        }
+    }
+
+    fun setRuleEnabled(rule: ForwardingRuleEntity, enabled: Boolean) {
+        viewModelScope.launch {
+            ruleRepository.setEnabled(rule, enabled)
+        }
+    }
+
+    fun updateRulePriority(rule: ForwardingRuleEntity, priority: Int) {
+        viewModelScope.launch {
+            ruleRepository.updateRulePriority(rule, priority)
+        }
+    }
+
+    fun resendRecord(record: ForwardRecordEntity) {
+        viewModelScope.launch {
+            recordRepository.markPending(record.id)
+            workScheduler.enqueue(record.id)
+        }
+    }
+
+    fun loadDeviceSms(limit: Int) {
+        viewModelScope.launch {
+            _deviceSmsMessages.value = deviceSmsScanner.getRecentSms(limit)
         }
     }
 
     fun updateSmsSearchQuery(query: String) {
-        smsSearchQuery.value = query
+        _smsSearchQuery.value = query
     }
 
-    fun manuallyForwardSms(incomingSms: IncomingSms) {
+    fun manuallyForwardSms(sms: IncomingSms) {
         viewModelScope.launch {
-            val matchedSender =
-                senderRepository.getMatchingEnabledSender(incomingSms.senderNormalized)
-            val payloadJson = payloadFactory.createJson(incomingSms)
+            val rules = ruleRepository.getEnabledRules()
+            var matchedRule: ForwardingRuleEntity? = null
+
+            for (rule in rules) {
+                val patternStr = Regex.escape(rule.senderPattern).replace("\\*", ".*")
+                val regex = Regex(patternStr, RegexOption.IGNORE_CASE)
+                
+                if (regex.matches(sms.senderNormalized)) {
+                    if (rule.bodyContains.isNullOrEmpty() || sms.body.contains(rule.bodyContains, ignoreCase = true)) {
+                        matchedRule = rule
+                        break
+                    }
+                }
+            }
+
+            val payloadJson = payloadFactory.createJson(sms)
             val recordId =
-                forwardRecordRepository.insertManualIncoming(
-                    incomingSms = incomingSms,
-                    matchedSender = matchedSender,
+                recordRepository.insertManualIncoming(
+                    incomingSms = sms,
+                    matchedRule = matchedRule,
                     payloadJson = payloadJson,
                 )
+
             workScheduler.enqueue(recordId)
-            feedbackMessage.value = "Message queued for forwarding."
+            _feedbackMessage.value = "SMS queued for forwarding"
         }
     }
 
-    fun clearFeedbackMessage() {
-        feedbackMessage.value = null
-    }
-
     companion object {
-        fun factory(container: AppContainer): ViewModelProvider.Factory =
-            viewModelFactory {
-                initializer {
-                    SmsForwarderViewModel(
+        val Factory: ViewModelProvider.Factory =
+            object : ViewModelProvider.Factory {
+                @Suppress("UNCHECKED_CAST")
+                override fun <T : ViewModel> create(
+                    modelClass: Class<T>,
+                    extras: androidx.lifecycle.viewmodel.CreationExtras,
+                ): T {
+                    val application =
+                        checkNotNull(extras[ViewModelProvider.AndroidViewModelFactory.APPLICATION_KEY]) as dev.akhilnarang.smsforwarder.SmsForwarderApp
+                    val container = application.container
+
+                    return SmsForwarderViewModel(
+                        ruleRepository = container.ruleRepository,
+                        destinationRepository = container.destinationRepository,
+                        recordRepository = container.forwardRecordRepository,
                         settingsRepository = container.settingsRepository,
-                        senderRepository = container.senderRepository,
-                        forwardRecordRepository = container.forwardRecordRepository,
-                        workScheduler = container.workScheduler,
-                        payloadFactory = container.payloadFactory,
                         deviceSmsScanner = container.deviceSmsScanner,
-                    )
+                        payloadFactory = container.payloadFactory,
+                        workScheduler = container.workScheduler,
+                    ) as T
                 }
             }
     }

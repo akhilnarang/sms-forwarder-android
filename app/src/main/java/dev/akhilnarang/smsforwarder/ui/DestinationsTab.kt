@@ -29,7 +29,6 @@ import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
 import dev.akhilnarang.smsforwarder.data.DestinationEntity
 import dev.akhilnarang.smsforwarder.data.DestinationType
-import dev.akhilnarang.smsforwarder.ui.components.EmptyState
 import org.json.JSONObject
 
 @Composable

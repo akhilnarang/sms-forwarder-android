@@ -20,6 +20,9 @@ class ForwardWorker(
             recordGateway = container.forwardRecordRepository,
             settingsGateway = container.settingsRepository,
             forwardClient = container.forwardClient,
+            destinationRepository = container.destinationRepository,
+            ruleRepository = container.ruleRepository,
+            payloadFactory = container.payloadFactory
         )
 
         return when (executor.execute(recordId, runAttemptCount)) {

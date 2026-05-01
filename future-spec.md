@@ -1,43 +1,80 @@
-# Future Spec: Multi-URL & Custom Payload Templates
+# Future Spec: Multi-URL & Rule-Based Routing
 
-This document outlines the architectural plan for supporting multiple webhook destinations, preset integrations (like Telegram), and fully customizable JSON payloads with template placeholders.
+This document outlines the architectural plan for evolving the SMS forwarder from a single-destination, sender-allowlist model to a powerful, rule-based routing engine supporting multiple destinations, conditional logic (sender + body text), and custom payload injection.
 
 ## 1. Multiple Destinations (URLs)
 
-Currently, the app supports a single global endpoint. The goal is to allow users to configure multiple destinations and assign specific sender rules to specific destinations.
+The foundation requires defining where messages can be sent. Destinations describe the connection, not the rules of what gets sent there.
 
 ### Data Model Changes
 **`DestinationEntity` (New Table)**
 - `id`: Long (Primary Key)
-- `label`: String (e.g., "Main Server", "Telegram Bot")
+- `label`: String (e.g., "Main Server", "Personal Telegram Bot")
 - `type`: Enum (`CUSTOM_WEBHOOK`, `TELEGRAM_PRESET`)
 - `endpointUrl`: String
 - `authHeaderName`: String?
 - `authHeaderValue`: String?
-- `payloadTemplate`: String? (Null implies the default schema)
+- `payloadTemplate`: String? (Optional. If null, the app uses the default JSON schema)
+- `configJson`: String? (Optional. Stores preset-specific configuration like Bot Tokens and Chat IDs so they can be re-populated in the edit UI)
 - `enabled`: Boolean
 
-**`ConfiguredSenderEntity` (Update)**
-- Add `destinationId`: Long (Foreign Key to `DestinationEntity`)
+### UI/UX Flow
+- **Destinations Tab (replaces Settings):** Lists configured endpoints with a FAB to add a new one.
+- **Add Destination Screen:**
+  - Choose type: "Custom Webhook" or "Telegram Bot"
+  - Fill in required fields based on type (URL, headers, or bot tokens).
+
+---
+
+## 2. Rule-Based Routing Engine
+
+This replaces the simple `ConfiguredSenderEntity`. We move to a Priority-Ordered Rule system.
+
+### Data Model Changes
+**`ForwardingRuleEntity` (Replaces ConfiguredSenderEntity)**
+- `id`: Long (Primary Key)
+- `priority`: Int (Used for ordering rules: 1 is highest priority)
+- `label`: String (e.g., "HDFC OTPs", "All other HDFC")
+- `senderPattern`: String (e.g., `*HDFC*`, supporting wildcard `*` by converting it to Regex `.*` under the hood)
+- `bodyContains`: String? (Optional. e.g., "OTP")
+- `destinationId`: Long (Foreign Key to `DestinationEntity`)
+- `customPayloadKeys`: String? (JSON serialized map of custom key/values, e.g., `{"category": "OTP"}`)
+- `enabled`: Boolean
+
+### The Routing Logic (First Match Wins)
+When a new SMS arrives:
+1. The app queries `ForwardingRuleEntity` ordered by `priority ASC`.
+2. It evaluates each rule:
+   - Does `normalizedSender` match `senderPattern` (using Regex `.*` conversion for `*`)?
+   - If `bodyContains` is not null, does `messageBody` contain the text (case-insensitive)?
+3. **Strict First Match Wins:** As soon as a rule evaluates to true, the loop stops entirely. The message is routed exclusively to this single destination.
+4. The message is queued for the associated `destinationId`, along with any `customPayloadKeys` defined by the rule.
 
 ### UI/UX Flow
-- **Settings Tab**: Becomes a "Destinations" tab. Lists configured destinations with a FAB to add a new one.
-- **Add Destination Screen**:
-  - Choose type: "Custom Webhook" or "Telegram Bot" etc.
-  - Fill in required fields based on type.
-- **Senders Tab**: When adding/editing a sender, add a Dropdown to select which Destination the messages should be routed to.
+- **Rules Tab (replaces Senders):** Lists rules in priority order.
+- **Reordering:** Users can drag-and-drop rows (or use up/down arrows) to change a rule's `priority`.
+- **Add Rule Screen:**
+  - Label: "HDFC Transactions"
+  - Sender: `*HDFC*`
+  - Body contains (optional): `debited`
+  - Route to: Dropdown selecting a configured Destination.
+  - Custom JSON keys (optional): UI to add Key-Value pairs (e.g., Key: `category`, Value: `transaction`).
+  - *Note: New rules are assigned a `priority` of `MAX(priority) + 1` (placed at the bottom of the list by default).*
 
-## 2. Integration Presets (e.g., Telegram)
+---
 
-Presets simplify the setup for common platforms by abstracting away the JSON formatting and API URLs.
+## 3. Integration Presets (e.g., Telegram)
+
+Presets simplify setup for common platforms by abstracting away JSON formatting and API URLs.
 
 ### Telegram Example
-- **UI Fields required from user**:
-  - `Bot Token` (e.g., `123456:ABC-DEF1234ghIkl-zyx57W2v1u123ew11`)
-  - `Chat ID` (e.g., `-100123456789`)
-- **Under the hood**:
-  - `endpointUrl` is internally generated as: `https://api.telegram.org/bot{BotToken}/sendMessage`
-  - `payloadTemplate` is internally set to:
+- **UI Fields required from user:**
+  - `Bot Token`
+  - `Chat ID`
+- **Under the hood:**
+  - `configJson`: Stores the raw token and chat ID for the UI.
+  - `endpointUrl`: `https://api.telegram.org/bot{BotToken}/sendMessage`
+  - `payloadTemplate` (Hidden from user):
     ```json
     {
       "chat_id": "{ChatID}",
@@ -46,42 +83,35 @@ Presets simplify the setup for common platforms by abstracting away the JSON for
     }
     ```
 
-## 3. Custom JSON with Placeholders
+---
 
-For "Custom Webhook" destinations, users shouldn't be locked into the default `ForwardPayload` schema if their receiving server expects something specific (like a Slack webhook or a custom API that can't be modified).
+## 4. Custom JSON with Placeholders & Rule Overrides
+
+For "Custom Webhook" destinations, users can define exactly how the payload looks using a template engine, and rules can inject data into that template.
 
 ### Template Engine
-We will implement a lightweight string replacement engine. 
+A lightweight string replacement engine runs before the OkHttp call.
 
 **Available Placeholders:**
-- `{{sender}}`: The raw sender address.
-- `{{normalizedSender}}`: The normalized sender.
-- `{{body}}`: The SMS message text (JSON escaped automatically).
-- `{{receivedAt}}`: Unix epoch timestamp.
-- `{{subscriptionId}}`: The SIM ID.
-- `{{deviceModel}}`: Phone model.
+- `{{sender}}`: Raw sender.
+- `{{body}}`: SMS text.
+- `{{receivedAt}}`: Epoch timestamp.
+- **Dynamic Rule Placeholders:** Any key defined in the Rule's `customPayloadKeys` can be referenced.
+  - *Example:* If the rule defines `{"category": "OTP"}`, the template can use `{{category}}`.
 
-### Execution (Worker Layer)
-In `ForwardWorker` (or a dedicated `PayloadGenerator`), before making the OkHttp call:
-1. Check if the `DestinationEntity` has a `payloadTemplate`.
-2. If null, use the default `ForwardPayloadFactory` schema.
-3. If present, run the replacement:
-   ```kotlin
-   var rendered = template
-       .replace("{{sender}}", sanitizeJsonString(record.senderRaw))
-       .replace("{{body}}", sanitizeJsonString(record.messageBody))
-       // ... etc
-   ```
-4. Send the `rendered` string as the `application/json` request body.
+### Security & Escaping
+If an SMS body contains quotes (`"`) or newlines (`\n`), a simple string replace creates invalid JSON. The app must safely encode string values using a utility like `JSONObject.quote(text)` or a serialization library before substituting them into the JSON template placeholders.
 
-### Security & Edge Cases
-- **JSON Escaping**: Crucial! If an SMS body contains quotes (`"`) or newlines (`\n`), a simple string replace will create invalid JSON. We must use a utility (like Kotlinx Serialization or a custom escaper) to safely encode `{{body}}` before substitution.
-- **Validation**: When the user saves a custom JSON template in the UI, we should attempt to parse it (with dummy data substituted in) using `JSONObject` to ensure they haven't made a syntax error before saving.
+---
 
-## 4. Migration Strategy
+## 5. Migration Strategy
 
-To move from the current single-URL setup to this multi-destination setup without breaking existing users:
-1. On database upgrade (Room Migration), read the current `AppSettings` (URL and headers).
-2. Create a default `DestinationEntity` named "Legacy Webhook" using those settings.
-3. Update all existing `ConfiguredSenderEntity` rows to point to this new default destination ID.
-4. Clear the old settings from `EncryptedSharedPreferences`.
+To move existing users to this new architecture safely:
+1. **Destinations:** Read current `AppSettings` (URL and headers). Create a default `DestinationEntity` ("Legacy Webhook").
+2. **Rules:** Read all existing `ConfiguredSenderEntity` rows. For each:
+   - Create a `ForwardingRuleEntity`.
+   - Set `senderPattern` to the existing normalized sender.
+   - Set `bodyContains` to null.
+   - Set `destinationId` to the "Legacy Webhook" ID.
+   - Set `priority` sequentially based on `id` (lowest ID becomes priority 1).
+3. **Cleanup:** Delete the old `ConfiguredSenderEntity` table and clear legacy settings from `EncryptedSharedPreferences`.

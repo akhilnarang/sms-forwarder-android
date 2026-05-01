@@ -1,7 +1,7 @@
 package dev.akhilnarang.smsforwarder.data
 
 import dev.akhilnarang.smsforwarder.sms.IncomingSms
-import dev.akhilnarang.smsforwarder.work.ForwardWorkScheduler
+import dev.akhilnarang.smsforwarder.data.ForwardingRuleEntity
 import kotlinx.coroutines.flow.Flow
 
 class ForwardRecordRepository(
@@ -15,7 +15,7 @@ class ForwardRecordRepository(
 
     suspend fun insertIncoming(
         incomingSms: IncomingSms,
-        matchedSender: ConfiguredSenderEntity?,
+        matchedRule: ForwardingRuleEntity?,
         payloadJson: String,
     ): Long =
         dao.insert(
@@ -27,16 +27,16 @@ class ForwardRecordRepository(
                 subscriptionId = incomingSms.subscriptionId,
                 multipart = incomingSms.multipart,
                 payloadJson = payloadJson,
-                status = if (matchedSender != null) DeliveryStatus.PENDING else DeliveryStatus.IGNORED,
-                statusReason = matchedSender?.let { "Matched sender: ${it.label}" }
-                    ?: "Sender not configured",
+                status = if (matchedRule != null) DeliveryStatus.PENDING else DeliveryStatus.IGNORED,
+                statusReason = matchedRule?.let { "Matched rule: ${it.label}" }
+                    ?: "Rule not matched",
                 lastError = null,
             ),
         )
 
     suspend fun insertManualIncoming(
         incomingSms: IncomingSms,
-        matchedSender: ConfiguredSenderEntity?,
+        matchedRule: ForwardingRuleEntity?,
         payloadJson: String,
     ): Long =
         dao.insert(
@@ -49,7 +49,7 @@ class ForwardRecordRepository(
                 multipart = incomingSms.multipart,
                 payloadJson = payloadJson,
                 status = DeliveryStatus.PENDING,
-                statusReason = matchedSender?.let { "Manually forwarded from device SMS: ${it.label}" }
+                statusReason = matchedRule?.let { "Manually forwarded from device SMS: ${it.label}" }
                     ?: "Manually forwarded from device SMS inbox",
                 lastError = null,
             ),

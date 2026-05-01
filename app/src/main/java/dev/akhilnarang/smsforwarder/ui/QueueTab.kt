@@ -31,7 +31,7 @@ import dev.akhilnarang.smsforwarder.data.ForwardRecordEntity
 @Composable
 internal fun QueueTab(
     records: List<ForwardRecordEntity>,
-    onRetryRecord: (Long) -> Unit,
+    onRetryRecord: (ForwardRecordEntity) -> Unit,
     onOpenRecord: (ForwardRecordEntity) -> Unit,
 ) {
     if (records.isEmpty()) {
@@ -115,7 +115,7 @@ internal fun QueueTab(
                             record.status == DeliveryStatus.PENDING ||
                             record.status == DeliveryStatus.RETRYING
                         ) {
-                            Button(onClick = { onRetryRecord(record.id) }) {
+                            Button(onClick = { onRetryRecord(record) }) {
                                 Text("Retry now")
                             }
                         }

@@ -184,16 +184,31 @@ class SmsForwarderViewModel(
         _smsSearchQuery.value = query
     }
 
-    fun manuallyForwardSms(sms: IncomingSms, destination: dev.akhilnarang.smsforwarder.data.DestinationEntity) {
+    fun manuallyForwardSms(sms: IncomingSms, rule: dev.akhilnarang.smsforwarder.data.ForwardingRuleEntity) {
         viewModelScope.launch {
-            var payloadJson = payloadFactory.createJson(sms) // Default payload
+            val destination = destinationRepository.getDestinationById(rule.destinationId)
+            if (destination == null) {
+                _feedbackMessage.value = "Failed: Destination not found for this rule"
+                return@launch
+            }
 
+            var customKeysMap: Map<String, String> = emptyMap()
+            rule.customPayloadKeys?.let {
+                try {
+                    val jsonObj = JSONObject(it)
+                    val map = mutableMapOf<String, String>()
+                    jsonObj.keys().forEach { key -> map[key] = jsonObj.getString(key) }
+                    customKeysMap = map
+                } catch (e: Exception) {}
+            }
+
+            var payloadJson = ""
             if (destination.type == dev.akhilnarang.smsforwarder.data.DestinationType.TELEGRAM_PRESET) {
                 try {
                     val config = JSONObject(destination.configJson ?: "{}")
                     val chatId = config.optString("chatId", "")
                     val template = if (!destination.payloadTemplate.isNullOrBlank()) destination.payloadTemplate else "<b>From:</b> {{sender}}\n\n{{body}}"
-                    val textStr = payloadFactory.createTextTemplate(template, sms, emptyMap())
+                    val textStr = payloadFactory.createTextTemplate(template, sms, customKeysMap)
                     val json = JSONObject()
                     json.put("chat_id", chatId)
                     json.put("text", textStr)
@@ -201,21 +216,21 @@ class SmsForwarderViewModel(
                     payloadJson = json.toString()
                 } catch (e: Exception) { }
             } else if (!destination.payloadTemplate.isNullOrBlank()) {
-                var customKeysMap: Map<String, String> = emptyMap()
-                // For manual forwarding, we don't have a matched rule with custom keys, so it will just be empty
                 payloadJson = payloadFactory.createCustomJson(destination.payloadTemplate, sms, customKeysMap)
+            } else {
+                payloadJson = payloadFactory.createJson(sms, customKeysMap)
             }
 
             val recordId =
                 recordRepository.insertManualIncoming(
                     incomingSms = sms,
-                    matchedRule = null,
+                    matchedRule = rule,
                     destinationId = destination.id,
                     payloadJson = payloadJson,
                 )
 
             workScheduler.enqueue(recordId)
-            _feedbackMessage.value = "SMS queued for manual forwarding to ${destination.label}"
+            _feedbackMessage.value = "SMS queued for manual forwarding using rule ${rule.label}"
         }
     }
 

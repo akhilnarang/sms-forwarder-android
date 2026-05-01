@@ -44,12 +44,13 @@ import dev.akhilnarang.smsforwarder.sms.IncomingSms
 internal fun DeviceSmsTab(
     hasReadSmsPermission: Boolean,
     messages: List<IncomingSms>,
+    rules: List<dev.akhilnarang.smsforwarder.data.ForwardingRuleEntity>,
     destinations: List<DestinationEntity>,
     searchQuery: String,
     onRequestSmsPermissions: () -> Unit,
     onLoadDeviceSms: () -> Unit,
     onSearchQueryChange: (String) -> Unit,
-    onForwardSms: (IncomingSms, DestinationEntity) -> Unit,
+    onForwardSms: (IncomingSms, dev.akhilnarang.smsforwarder.data.ForwardingRuleEntity) -> Unit,
 ) {
     var smsToForward by remember { mutableStateOf<IncomingSms?>(null) }
 
@@ -180,34 +181,43 @@ internal fun DeviceSmsTab(
     smsToForward?.let { message ->
         AlertDialog(
             onDismissRequest = { smsToForward = null },
-            title = { Text("Select Destination") },
+            title = { Text("Select Rule for Forwarding") },
             text = {
-                if (destinations.isEmpty()) {
-                    Text("No destinations configured. Please add a destination first.")
+                if (rules.isEmpty()) {
+                    Text("No rules configured. Please add a rule first.")
                 } else {
                     LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                        items(destinations) { dest ->
+                        items(rules) { rule ->
+                            val dest = destinations.find { it.id == rule.destinationId }
+                            val patternStr = Regex.escape(rule.senderPattern).replace("\\*", ".*")
+                            val regex = Regex(patternStr, RegexOption.IGNORE_CASE)
+                            val isMatch = regex.matches(message.senderNormalized) && 
+                                (rule.bodyContains.isNullOrEmpty() || message.body.contains(rule.bodyContains, ignoreCase = true))
+
                             Surface(
                                 modifier = Modifier
                                     .fillMaxWidth()
                                     .clickable {
-                                        onForwardSms(message, dest)
+                                        onForwardSms(message, rule)
                                         smsToForward = null
                                     },
                                 shape = MaterialTheme.shapes.small,
-                                color = MaterialTheme.colorScheme.surfaceVariant,
+                                color = if (isMatch) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceVariant,
                             ) {
                                 Row(
                                     modifier = Modifier.padding(16.dp),
                                     verticalAlignment = Alignment.CenterVertically
                                 ) {
                                     Column {
-                                        Text(text = dest.label, fontWeight = FontWeight.SemiBold)
                                         Text(
-                                            text = if (dest.type == dev.akhilnarang.smsforwarder.data.DestinationType.TELEGRAM_PRESET) "Telegram Bot" else dest.endpointUrl, 
-                                            style = MaterialTheme.typography.bodySmall, 
-                                            maxLines = 1, 
-                                            overflow = TextOverflow.Ellipsis
+                                            text = rule.label + if (isMatch) " (Auto-Matched)" else "", 
+                                            fontWeight = FontWeight.SemiBold,
+                                            color = if (isMatch) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurface
+                                        )
+                                        Text(
+                                            text = dest?.label ?: "Unknown Destination", 
+                                            style = MaterialTheme.typography.bodySmall,
+                                            color = if (isMatch) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurfaceVariant
                                         )
                                     }
                                 }

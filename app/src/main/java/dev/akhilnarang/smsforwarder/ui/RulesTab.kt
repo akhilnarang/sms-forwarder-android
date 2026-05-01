@@ -48,11 +48,13 @@ internal fun RulesTab(
     rules: List<ForwardingRuleEntity>,
     destinations: List<DestinationEntity>,
     onAddRule: (ForwardingRuleEntity) -> Unit,
+    onEditRule: (ForwardingRuleEntity) -> Unit,
     onSetRuleEnabled: (ForwardingRuleEntity, Boolean) -> Unit,
     onDeleteRule: (ForwardingRuleEntity) -> Unit,
-    onUpdateRulePriority: (ForwardingRuleEntity, Int) -> Unit
+    onUpdateRulePriority: (ForwardingRuleEntity, Int) -> Unit,
 ) {
     var showAddDialog by remember { mutableStateOf(false) }
+    var editRule by remember { mutableStateOf<ForwardingRuleEntity?>(null) }
 
     Box(modifier = Modifier.fillMaxSize()) {
         if (rules.isEmpty()) {
@@ -67,7 +69,10 @@ internal fun RulesTab(
             ) {
                 items(rules, key = { it.id }) { rule ->
                     val dest = destinations.find { it.id == rule.destinationId }
-                    Card(modifier = Modifier.fillMaxWidth()) {
+                    Card(
+                        modifier = Modifier.fillMaxWidth(),
+                        onClick = { editRule = rule }
+                    ) {
                         ListItem(
                             headlineContent = { Text(rule.label, fontWeight = FontWeight.Bold) },
                             supportingContent = {
@@ -123,22 +128,35 @@ internal fun RulesTab(
             }
         )
     }
+
+    editRule?.let { ruleToEdit ->
+        AddRuleDialog(
+            initialRule = ruleToEdit,
+            destinations = destinations,
+            onDismiss = { editRule = null },
+            onSave = { updatedRule ->
+                onEditRule(updatedRule)
+                editRule = null
+            }
+        )
+    }
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun AddRuleDialog(
+    initialRule: ForwardingRuleEntity? = null,
     destinations: List<DestinationEntity>,
     onDismiss: () -> Unit,
     onSave: (ForwardingRuleEntity) -> Unit
 ) {
-    var label by remember { mutableStateOf("") }
-    var senderPattern by remember { mutableStateOf("") }
-    var bodyContains by remember { mutableStateOf("") }
-    var selectedDestination by remember { mutableStateOf<DestinationEntity?>(destinations.firstOrNull()) }
+    var label by remember { mutableStateOf(initialRule?.label ?: "") }
+    var senderPattern by remember { mutableStateOf(initialRule?.senderPattern ?: "") }
+    var bodyContains by remember { mutableStateOf(initialRule?.bodyContains ?: "") }
+    var selectedDestination by remember { mutableStateOf(destinations.find { it.id == initialRule?.destinationId } ?: destinations.firstOrNull()) }
     var expanded by remember { mutableStateOf(false) }
 
-    var customKeysStr by remember { mutableStateOf("") }
+    var customKeysStr by remember { mutableStateOf(initialRule?.customPayloadKeys ?: "") }
 
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -217,7 +235,13 @@ private fun AddRuleDialog(
                             }
                         }
 
-                        val rule = ForwardingRuleEntity(
+                        val rule = initialRule?.copy(
+                            label = label,
+                            senderPattern = senderPattern,
+                            bodyContains = bodyContains.ifBlank { null },
+                            destinationId = selectedDestination!!.id,
+                            customPayloadKeys = parsedJson,
+                        ) ?: ForwardingRuleEntity(
                             priority = 0, // Repository assigns actual priority
                             label = label,
                             senderPattern = senderPattern,

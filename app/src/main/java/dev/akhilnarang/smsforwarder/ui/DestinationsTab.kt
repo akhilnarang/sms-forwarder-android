@@ -35,10 +35,12 @@ import org.json.JSONObject
 internal fun DestinationsTab(
     destinations: List<DestinationEntity>,
     onAddDestination: (String, DestinationType, String, String, String, String, String) -> Unit,
+    onEditDestination: (Long, String, DestinationType, String, String, String, String, String) -> Unit,
     onSetDestinationEnabled: (DestinationEntity, Boolean) -> Unit,
     onDeleteDestination: (Long) -> Unit,
 ) {
     var showAddDialog by remember { mutableStateOf(false) }
+    var editDestination by remember { mutableStateOf<DestinationEntity?>(null) }
 
     Box(modifier = Modifier.fillMaxSize()) {
         if (destinations.isEmpty()) {
@@ -82,21 +84,24 @@ internal fun DestinationsTab(
                                 )
                             }
                         },
-                        content = {
-                            ElevatedCard(modifier = Modifier.fillMaxWidth()) {
-                                ListItem(
-                                    headlineContent = { Text(dest.label, fontWeight = FontWeight.SemiBold) },
-                                    overlineContent = { Text(dest.type.name) },
-                                    supportingContent = { Text(dest.endpointUrl) },
-                                    trailingContent = {
-                                        Switch(
-                                            checked = dest.enabled,
-                                            onCheckedChange = { onSetDestinationEnabled(dest, it) }
-                                        )
-                                    }
-                                )
-                            }
-                        }
+        content = {
+            ElevatedCard(
+                modifier = Modifier.fillMaxWidth(),
+                onClick = { editDestination = dest }
+            ) {
+                ListItem(
+                    headlineContent = { Text(dest.label, fontWeight = FontWeight.SemiBold) },
+                    overlineContent = { Text(dest.type.name) },
+                    supportingContent = { Text(dest.endpointUrl) },
+                    trailingContent = {
+                        Switch(
+                            checked = dest.enabled,
+                            onCheckedChange = { onSetDestinationEnabled(dest, it) }
+                        )
+                    }
+                )
+            }
+        }
                     )
                 }
                 Spacer(modifier = Modifier.height(80.dp))
@@ -122,23 +127,45 @@ internal fun DestinationsTab(
             }
         )
     }
+
+    editDestination?.let { dest ->
+        AddDestinationDialog(
+            initialDestination = dest,
+            onDismiss = { editDestination = null },
+            onAdd = { label, type, url, authName, authVal, payload, config ->
+                onEditDestination(dest.id, label, type, url, authName, authVal, payload, config)
+                editDestination = null
+            }
+        )
+    }
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun AddDestinationDialog(
+    initialDestination: DestinationEntity? = null,
     onDismiss: () -> Unit,
     onAdd: (String, DestinationType, String, String, String, String, String) -> Unit
 ) {
-    var label by remember { mutableStateOf("") }
-    var type by remember { mutableStateOf(DestinationType.CUSTOM_WEBHOOK) }
-    var endpointUrl by remember { mutableStateOf("") }
-    var authName by remember { mutableStateOf("") }
-    var authVal by remember { mutableStateOf("") }
-    var payloadTemplate by remember { mutableStateOf("") }
+    var label by remember { mutableStateOf(initialDestination?.label ?: "") }
+    var type by remember { mutableStateOf(initialDestination?.type ?: DestinationType.CUSTOM_WEBHOOK) }
+    var endpointUrl by remember { mutableStateOf(initialDestination?.endpointUrl ?: "") }
+    var authName by remember { mutableStateOf(initialDestination?.authHeaderName ?: "") }
+    var authVal by remember { mutableStateOf(initialDestination?.authHeaderValue ?: "") }
+    var payloadTemplate by remember { mutableStateOf(initialDestination?.payloadTemplate ?: "") }
     
     var botToken by remember { mutableStateOf("") }
     var chatId by remember { mutableStateOf("") }
+
+    LaunchedEffect(initialDestination) {
+        initialDestination?.configJson?.let {
+            try {
+                val json = JSONObject(it)
+                if (json.has("botToken")) botToken = json.getString("botToken")
+                if (json.has("chatId")) chatId = json.getString("chatId")
+            } catch (e: Exception) {}
+        }
+    }
 
     var expanded by remember { mutableStateOf(false) }
 

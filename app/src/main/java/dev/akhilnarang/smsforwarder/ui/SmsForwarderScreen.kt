@@ -129,6 +129,21 @@ fun SmsForwarderScreen(
                                         )
                                     )
                                 },
+                                onEditDestination = { id, label, type, url, authName, authVal, payload, config -> 
+                                    viewModel.updateDestination(
+                                        dev.akhilnarang.smsforwarder.data.DestinationEntity(
+                                            id = id,
+                                            label = label,
+                                            type = type,
+                                            endpointUrl = url,
+                                            authHeaderName = authName.takeIf { it.isNotBlank() },
+                                            authHeaderValue = authVal.takeIf { it.isNotBlank() },
+                                            payloadTemplate = payload.takeIf { it.isNotBlank() },
+                                            configJson = config.takeIf { it.isNotBlank() },
+                                            enabled = true
+                                        )
+                                    )
+                                },
                                 onSetDestinationEnabled = viewModel::setDestinationEnabled,
                                 onDeleteDestination = { id -> 
                                     uiState.destinations.find { it.id == id }?.let { 
@@ -141,6 +156,7 @@ fun SmsForwarderScreen(
                                 rules = uiState.rules,
                                 destinations = uiState.destinations,
                                 onAddRule = viewModel::addRule,
+                                onEditRule = viewModel::updateRule,
                                 onSetRuleEnabled = viewModel::setRuleEnabled,
                                 onDeleteRule = viewModel::deleteRule,
                                 onUpdateRulePriority = viewModel::updateRulePriority,

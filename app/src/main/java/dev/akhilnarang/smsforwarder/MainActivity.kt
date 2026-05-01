@@ -20,6 +20,7 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.core.content.ContextCompat
 import dev.akhilnarang.smsforwarder.ui.SmsForwarderScreen
 import dev.akhilnarang.smsforwarder.ui.SmsForwarderViewModel
+import dev.akhilnarang.smsforwarder.ui.theme.SmsForwarderTheme
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -29,7 +30,7 @@ class MainActivity : ComponentActivity() {
         setContent {
             val app = application as SmsForwarderApp
             val viewModel: SmsForwarderViewModel =
-                viewModel(factory = SmsForwarderViewModel.factory(app.container))
+                viewModel(factory = SmsForwarderViewModel.Factory)
             var hasReceiveSmsPermission by remember {
                 mutableStateOf(hasPermission(Manifest.permission.RECEIVE_SMS))
             }
@@ -46,9 +47,7 @@ class MainActivity : ComponentActivity() {
                             hasPermission(Manifest.permission.READ_SMS)
                 }
 
-            MaterialTheme(
-                colorScheme = if (isSystemInDarkTheme()) darkColorScheme() else lightColorScheme(),
-            ) {
+            SmsForwarderTheme {
                 SmsForwarderScreen(
                     viewModel = viewModel,
                     hasReceiveSmsPermission = hasReceiveSmsPermission,

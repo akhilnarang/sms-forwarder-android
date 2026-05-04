@@ -7,3 +7,5 @@ local.properties
 **/build/
 captures/
 
+release.keystore
+*.b64

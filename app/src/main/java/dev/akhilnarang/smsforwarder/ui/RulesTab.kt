@@ -183,8 +183,9 @@ private fun AddRuleDialog(
                 OutlinedTextField(
                     value = bodyContains,
                     onValueChange = { bodyContains = it },
-                    label = { Text("Body Contains (Optional)") },
-                    modifier = Modifier.fillMaxWidth()
+                    label = { Text("Body Contains (* allowed, Optional)") },
+                    modifier = Modifier.fillMaxWidth(),
+                    supportingText = { Text("e.g. *OTP* or just OTP") }
                 )
 
                 ExposedDropdownMenuBox(

@@ -26,7 +26,15 @@ class SmsProcessor(
             val regex = Regex(patternStr, RegexOption.IGNORE_CASE)
             
             if (regex.matches(incomingSms.senderNormalized)) {
-                if (rule.bodyContains.isNullOrEmpty() || incomingSms.body.contains(rule.bodyContains, ignoreCase = true)) {
+                val isBodyMatch = if (rule.bodyContains.isNullOrEmpty()) {
+                    true
+                } else {
+                    val bodyPatternStr = Regex.escape(rule.bodyContains).replace("\\*", ".*")
+                    val bodyRegex = Regex(bodyPatternStr, RegexOption.IGNORE_CASE)
+                    bodyRegex.containsMatchIn(incomingSms.body)
+                }
+
+                if (isBodyMatch) {
                     matchedRule = rule
                     destinationId = rule.destinationId
                     

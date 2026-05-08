@@ -53,4 +53,62 @@ class WildcardRegexTest {
         assertTrue(regex.matches(""))
         assertTrue(regex.matches("anything"))
     }
+
+    // Realistic OTP fixtures (PII scrubbed: codes, amounts, and card endings
+    // are placeholders; sender IDs follow the standard DLT header format).
+
+    private val hdfcOtpSender = "JM-HDFCBK-S"
+    private val hdfcOtpBody =
+        "OTP is 000000 for txn of INR 0.00 at MERCHANT on HDFC Bank " +
+            "card ending 0000. Valid till 00:00. Do not share OTP for security reasons"
+
+    private val iciciOtpSender = "AD-ICICIO-T"
+    private val iciciOtpBody =
+        "000000 is One-Time Password for INR 0.00 transaction towards MERCHANT " +
+            "using ICICI Bank Credit Card XX0000. OTPs are SECRET. DO NOT disclose"
+
+    @Test
+    fun otp_body_pattern_matches_hdfc_message() {
+        assertTrue(wildcardRegex("*OTP*").containsMatchIn(hdfcOtpBody))
+    }
+
+    @Test
+    fun otp_body_pattern_matches_icici_message() {
+        // ICICI spells out "One-Time Password" but also says "OTPs" later.
+        assertTrue(wildcardRegex("*OTP*").containsMatchIn(iciciOtpBody))
+    }
+
+    @Test
+    fun one_time_password_pattern_matches_icici_but_not_hdfc() {
+        val regex = wildcardRegex("*One-Time Password*")
+        assertTrue(regex.containsMatchIn(iciciOtpBody))
+        assertFalse(regex.containsMatchIn(hdfcOtpBody))
+    }
+
+    @Test
+    fun hdfc_sender_pattern_matches_dlt_header() {
+        assertTrue(wildcardRegex("*HDFCBK*").matches(hdfcOtpSender))
+        assertFalse(wildcardRegex("*HDFCBK*").matches(iciciOtpSender))
+    }
+
+    @Test
+    fun icici_sender_pattern_matches_dlt_header() {
+        assertTrue(wildcardRegex("*ICICI*").matches(iciciOtpSender))
+        assertFalse(wildcardRegex("*ICICI*").matches(hdfcOtpSender))
+    }
+
+    @Test
+    fun bank_body_pattern_matches_both_otp_messages() {
+        val regex = wildcardRegex("*Bank*")
+        assertTrue(regex.containsMatchIn(hdfcOtpBody))
+        assertTrue(regex.containsMatchIn(iciciOtpBody))
+    }
+
+    @Test
+    fun sender_pattern_with_middle_wildcard_matches_dlt_header() {
+        // Header format is <PE/PromoEntity>-<BrandID>-<channel suffix>.
+        assertTrue(wildcardRegex("JM-*-S").matches(hdfcOtpSender))
+        assertTrue(wildcardRegex("AD-*-T").matches(iciciOtpSender))
+        assertFalse(wildcardRegex("JM-*-S").matches(iciciOtpSender))
+    }
 }

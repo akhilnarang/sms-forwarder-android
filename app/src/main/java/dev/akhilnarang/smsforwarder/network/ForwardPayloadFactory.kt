@@ -93,4 +93,23 @@ class ForwardPayloadFactory {
             replacements[key] ?: matchResult.value
         }
     }
+
+    fun createTelegramText(template: String, incomingSms: IncomingSms, customKeysMap: Map<String, String>): String {
+        fun esc(s: String) = s.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
+        val receivedAtIso = Instant.ofEpochMilli(incomingSms.receivedAtEpochMs).toString()
+        val replacements = mutableMapOf(
+            "sender" to esc(incomingSms.senderRaw),
+            "body" to esc(incomingSms.body),
+            "received_at" to receivedAtIso
+        )
+        for ((key, value) in customKeysMap) {
+            replacements[key] = esc(value)
+        }
+
+        val regex = Regex("\\{\\{([^{}]+)\\}\\}")
+        return regex.replace(template) { matchResult ->
+            val key = matchResult.groupValues[1]
+            replacements[key] ?: matchResult.value
+        }
+    }
 }

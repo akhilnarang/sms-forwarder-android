@@ -215,7 +215,7 @@ class SmsForwarderViewModel(
                     val config = JSONObject(destination.configJson ?: "{}")
                     val chatId = config.optString("chatId", "")
                     val template = if (!destination.payloadTemplate.isNullOrBlank()) destination.payloadTemplate else "<b>From:</b> {{sender}}\n\n{{body}}"
-                    val textStr = payloadFactory.createTextTemplate(template, sms, customKeysMap)
+                    val textStr = payloadFactory.createTelegramText(template, sms, customKeysMap)
                     val json = JSONObject()
                     json.put("chat_id", chatId)
                     json.put("text", textStr)

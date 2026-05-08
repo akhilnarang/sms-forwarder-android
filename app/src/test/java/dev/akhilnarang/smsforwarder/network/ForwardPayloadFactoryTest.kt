@@ -40,4 +40,33 @@ class ForwardPayloadFactoryTest {
             keys,
         )
     }
+
+    @Test
+    fun `createTelegramText escapes html-special characters in body`() {
+        val sms = makeSms(
+            sender = "VK-HDFCBK",
+            body = "Your OTP is 123 <3 use within 10 mins",
+        )
+
+        val result = factory.createTelegramText(
+            template = "<b>From:</b> {{sender}}\n\n{{body}}",
+            incomingSms = sms,
+            customKeysMap = emptyMap(),
+        )
+
+        assertEquals("<b>From:</b> VK-HDFCBK\n\nYour OTP is 123 &lt;3 use within 10 mins", result)
+    }
+
+    @Test
+    fun `createTelegramText escapes ampersand and gt in custom key values`() {
+        val sms = makeSms(sender = "S", body = "body", epochMs = 0L)
+
+        val result = factory.createTelegramText(
+            template = "{{merchant}}",
+            incomingSms = sms,
+            customKeysMap = mapOf("merchant" to "Tom & Jerry > Cat"),
+        )
+
+        assertEquals("Tom &amp; Jerry &gt; Cat", result)
+    }
 }

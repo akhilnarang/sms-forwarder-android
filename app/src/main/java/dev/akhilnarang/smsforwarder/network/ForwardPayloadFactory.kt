@@ -52,6 +52,9 @@ class ForwardPayloadFactory {
         } catch (e: Exception) {
             throw IllegalArgumentException("Custom payload template is not valid JSON", e)
         }
+        if (root !is JSONObject && root !is JSONArray) {
+            throw IllegalArgumentException("Custom payload template must be a JSON object or array, got: ${root::class.simpleName}")
+        }
 
         val placeholderRegex = Regex("\\{\\{([^{}]+)\\}\\}")
         fun resolveLeaf(s: String): String {

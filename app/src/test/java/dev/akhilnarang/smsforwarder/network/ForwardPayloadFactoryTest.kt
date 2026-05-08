@@ -113,6 +113,47 @@ class ForwardPayloadFactoryTest {
     }
 
     @Test
+    fun `createCustomJson resolves placeholder inside array element`() {
+        val factory = ForwardPayloadFactory()
+        val sms = makeSms(body = "alert text")
+        val out = factory.createCustomJson(
+            template = """{"items":["{{body}}","static"]}""",
+            incomingSms = sms,
+            customKeysMap = emptyMap(),
+        )
+        val parsed = JSONObject(out)
+        val items = parsed.getJSONArray("items")
+        assertEquals("alert text", items.getString(0))
+        assertEquals("static", items.getString(1))
+    }
+
+    @Test
+    fun `createCustomJson leaves unknown placeholder literal`() {
+        val factory = ForwardPayloadFactory()
+        val sms = makeSms()
+        val out = factory.createCustomJson(
+            template = """{"text":"{{not_a_real_key}}"}""",
+            incomingSms = sms,
+            customKeysMap = emptyMap(),
+        )
+        val parsed = JSONObject(out)
+        assertEquals("{{not_a_real_key}}", parsed.getString("text"))
+    }
+
+    @Test
+    fun `createCustomJson rejects template that parses as a bare scalar`() {
+        val factory = ForwardPayloadFactory()
+        val sms = makeSms()
+        assertThrows(IllegalArgumentException::class.java) {
+            factory.createCustomJson(
+                template = "Sender: {{sender}}",
+                incomingSms = sms,
+                customKeysMap = emptyMap(),
+            )
+        }
+    }
+
+    @Test
     fun `createCustomJson throws on malformed template instead of silently returning garbage`() {
         val factory = ForwardPayloadFactory()
         val sms = makeSms()

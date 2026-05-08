@@ -3,7 +3,9 @@ package dev.akhilnarang.smsforwarder.network
 import dev.akhilnarang.smsforwarder.sms.IncomingSms
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.jsonObject
+import org.json.JSONObject
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertThrows
 import org.junit.Test
 
 class ForwardPayloadFactoryTest {
@@ -68,5 +70,58 @@ class ForwardPayloadFactoryTest {
         )
 
         assertEquals("Tom &amp; Jerry &gt; Cat", result)
+    }
+
+    @Test
+    fun `createCustomJson handles body containing literal backslash`() {
+        val factory = ForwardPayloadFactory()
+        val sms = makeSms(body = "back\\slash here")
+        val out = factory.createCustomJson(
+            template = """{"text":"{{body}}"}""",
+            incomingSms = sms,
+            customKeysMap = emptyMap(),
+        )
+        val parsed = JSONObject(out)
+        assertEquals("back\\slash here", parsed.getString("text"))
+    }
+
+    @Test
+    fun `createCustomJson handles body containing double quote`() {
+        val factory = ForwardPayloadFactory()
+        val sms = makeSms(body = "she said \"hi\"")
+        val out = factory.createCustomJson(
+            template = """{"text":"{{body}}"}""",
+            incomingSms = sms,
+            customKeysMap = emptyMap(),
+        )
+        val parsed = JSONObject(out)
+        assertEquals("she said \"hi\"", parsed.getString("text"))
+    }
+
+    @Test
+    fun `createCustomJson preserves placeholder in nested object`() {
+        val factory = ForwardPayloadFactory()
+        val sms = makeSms(sender = "Bank", body = "alert")
+        val out = factory.createCustomJson(
+            template = """{"meta":{"sender":"{{sender}}"},"body":"{{body}}"}""",
+            incomingSms = sms,
+            customKeysMap = emptyMap(),
+        )
+        val parsed = JSONObject(out)
+        assertEquals("Bank", parsed.getJSONObject("meta").getString("sender"))
+        assertEquals("alert", parsed.getString("body"))
+    }
+
+    @Test
+    fun `createCustomJson throws on malformed template instead of silently returning garbage`() {
+        val factory = ForwardPayloadFactory()
+        val sms = makeSms()
+        assertThrows(IllegalArgumentException::class.java) {
+            factory.createCustomJson(
+                template = "{not json}",
+                incomingSms = sms,
+                customKeysMap = emptyMap(),
+            )
+        }
     }
 }

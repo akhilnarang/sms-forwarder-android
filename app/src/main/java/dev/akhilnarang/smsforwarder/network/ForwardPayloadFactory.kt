@@ -5,7 +5,9 @@ import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
+import org.json.JSONArray
 import org.json.JSONObject
+import org.json.JSONTokener
 import java.time.Instant
 
 @Serializable
@@ -38,42 +40,44 @@ class ForwardPayloadFactory {
         
     fun createCustomJson(template: String, incomingSms: IncomingSms, customKeysMap: Map<String, String>): String {
         val receivedAtIso = Instant.ofEpochMilli(incomingSms.receivedAtEpochMs).toString()
-        val replacements = mutableMapOf(
-            "sender" to JSONObject.quote(incomingSms.senderRaw).removeSurrounding("\""),
-            "body" to JSONObject.quote(incomingSms.body).removeSurrounding("\""),
-            "received_at" to receivedAtIso
-        )
-        for ((key, value) in customKeysMap) {
-            replacements[key] = JSONObject.quote(value).removeSurrounding("\"")
+        val replacements = buildMap<String, String> {
+            put("sender", incomingSms.senderRaw)
+            put("body", incomingSms.body)
+            put("received_at", receivedAtIso)
+            putAll(customKeysMap)
         }
 
-        val regex = Regex("\\{\\{([^{}]+)\\}\\}")
-        val replacedTemplate = regex.replace(template) { matchResult ->
-            val key = matchResult.groupValues[1]
-            replacements[key] ?: matchResult.value
+        val root: Any = try {
+            JSONTokener(template).nextValue()
+        } catch (e: Exception) {
+            throw IllegalArgumentException("Custom payload template is not valid JSON", e)
         }
-        
-        if (customKeysMap.isEmpty()) return replacedTemplate
 
-        return try {
-            val obj = JSONObject(replacedTemplate)
+        val placeholderRegex = Regex("\\{\\{([^{}]+)\\}\\}")
+        fun resolveLeaf(s: String): String {
+            return placeholderRegex.replace(s) { m -> replacements[m.groupValues[1]] ?: m.value }
+        }
+
+        fun walk(node: Any?): Any? = when (node) {
+            is JSONObject -> JSONObject().also { out ->
+                node.keys().forEach { k -> out.put(k, walk(node.get(k))) }
+            }
+            is JSONArray -> JSONArray().also { out ->
+                for (i in 0 until node.length()) out.put(walk(node.get(i)))
+            }
+            is String -> resolveLeaf(node)
+            else -> node
+        }
+
+        val walked = walk(root)
+        if (walked is JSONObject) {
             for ((key, value) in customKeysMap) {
-                // If it's not already in the template, append it
-                if (!obj.has(key)) {
-                    // Try to parse the value as JSON (e.g. number/boolean) or fallback to string
-                    try {
-                        val parsedVal = org.json.JSONTokener(value).nextValue()
-                        obj.put(key, parsedVal)
-                    } catch (e: Exception) {
-                        obj.put(key, value)
-                    }
+                if (!walked.has(key)) {
+                    walked.put(key, try { JSONTokener(value).nextValue() } catch (_: Exception) { value })
                 }
             }
-            obj.toString(2)
-        } catch (e: Exception) {
-            // If template isn't valid JSON (e.g. malformed), just return the replaced string
-            replacedTemplate
         }
+        return walked.toString()
     }
 
     fun createTextTemplate(template: String, incomingSms: IncomingSms, customKeysMap: Map<String, String>): String {

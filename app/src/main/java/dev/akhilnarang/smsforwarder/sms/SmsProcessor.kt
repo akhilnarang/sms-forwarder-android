@@ -1,5 +1,6 @@
 package dev.akhilnarang.smsforwarder.sms
 
+import android.util.Log
 import dev.akhilnarang.smsforwarder.data.DestinationDao
 import dev.akhilnarang.smsforwarder.data.ForwardingRuleDao
 import dev.akhilnarang.smsforwarder.data.ForwardingRuleEntity
@@ -42,7 +43,9 @@ class SmsProcessor(
                             val map = mutableMapOf<String, String>()
                             json.keys().forEach { key -> map[key] = json.getString(key) }
                             customKeysMap = map
-                        } catch (e: Exception) {}
+                        } catch (e: Exception) {
+                            Log.w("SmsProcessor", "Failed to parse customPayloadKeys for rule ${rule.id}", e)
+                        }
                     }
                     
                     // Retrieve destination to check for custom payload template
@@ -59,7 +62,21 @@ class SmsProcessor(
                                 json.put("text", textStr)
                                 json.put("parse_mode", "HTML")
                                 payloadJson = json.toString()
-                            } catch (e: Exception) { }
+                            } catch (e: Exception) {
+                                Log.w("SmsProcessor", "Failed to build Telegram payload for rule ${rule.id}", e)
+                                val failedId =
+                                    forwardRecordRepository.insertIncoming(
+                                        incomingSms = incomingSms,
+                                        matchedRule = rule,
+                                        destinationId = destinationId,
+                                        payloadJson = "",
+                                    )
+                                forwardRecordRepository.markFailed(
+                                    failedId,
+                                    "Telegram payload build failed: ${e.message}",
+                                )
+                                return
+                            }
                         } else if (!destination.payloadTemplate.isNullOrBlank()) {
                             payloadJson = payloadFactory.createCustomJson(destination.payloadTemplate, incomingSms, customKeysMap)
                         } else {

@@ -10,16 +10,16 @@ import androidx.work.WorkManager
 import androidx.work.workDataOf
 import java.util.concurrent.TimeUnit
 
-class ForwardWorkScheduler(
-    context: Context,
+open class ForwardWorkScheduler(
+    private val context: Context,
 ) {
-    private val workManager = WorkManager.getInstance(context)
+    private val workManager by lazy { WorkManager.getInstance(context) }
 
-    fun enqueue(recordId: Long) {
+    open fun enqueue(recordId: Long) {
         enqueue(recordId, ExistingWorkPolicy.KEEP)
     }
 
-    fun retryNow(recordId: Long) {
+    open fun retryNow(recordId: Long) {
         enqueue(recordId, ExistingWorkPolicy.REPLACE)
     }
 

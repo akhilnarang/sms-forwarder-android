@@ -39,6 +39,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import dev.akhilnarang.smsforwarder.data.DestinationEntity
 import dev.akhilnarang.smsforwarder.sms.IncomingSms
+import dev.akhilnarang.smsforwarder.sms.wildcardRegex
 
 @Composable
 internal fun DeviceSmsTab(
@@ -189,10 +190,10 @@ internal fun DeviceSmsTab(
                     LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                         items(rules) { rule ->
                             val dest = destinations.find { it.id == rule.destinationId }
-                            val patternStr = Regex.escape(rule.senderPattern).replace("\\*", ".*")
-                            val regex = Regex(patternStr, RegexOption.IGNORE_CASE)
-                            val isMatch = regex.matches(message.senderNormalized) && 
-                                (rule.bodyContains.isNullOrEmpty() || message.body.contains(rule.bodyContains, ignoreCase = true))
+                            val regex = wildcardRegex(rule.senderPattern)
+                            val isMatch = regex.matches(message.senderNormalized) &&
+                                (rule.bodyContains.isNullOrEmpty() ||
+                                    wildcardRegex(rule.bodyContains).containsMatchIn(message.body))
 
                             Surface(
                                 modifier = Modifier

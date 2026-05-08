@@ -22,16 +22,13 @@ class SmsProcessor(
         var payloadJson = payloadFactory.createJson(incomingSms) // Default payload
 
         for (rule in rules) {
-            val patternStr = Regex.escape(rule.senderPattern).replace("\\*", ".*")
-            val regex = Regex(patternStr, RegexOption.IGNORE_CASE)
-            
+            val regex = wildcardRegex(rule.senderPattern)
+
             if (regex.matches(incomingSms.senderNormalized)) {
                 val isBodyMatch = if (rule.bodyContains.isNullOrEmpty()) {
                     true
                 } else {
-                    val bodyPatternStr = Regex.escape(rule.bodyContains).replace("\\*", ".*")
-                    val bodyRegex = Regex(bodyPatternStr, RegexOption.IGNORE_CASE)
-                    bodyRegex.containsMatchIn(incomingSms.body)
+                    wildcardRegex(rule.bodyContains).containsMatchIn(incomingSms.body)
                 }
 
                 if (isBodyMatch) {
@@ -88,4 +85,15 @@ class SmsProcessor(
             workScheduler.enqueue(recordId)
         }
     }
+}
+
+internal fun wildcardRegex(pattern: String): Regex {
+    // Split on '*' first so each literal segment is properly escaped, then
+    // join with '.*'. Doing Regex.escape on the whole pattern doesn't work
+    // because Pattern.quote wraps the input in \Q...\E, so '*' never gets
+    // converted to a wildcard.
+    val regexPattern = pattern.split("*").joinToString(".*") {
+        if (it.isEmpty()) "" else Regex.escape(it)
+    }
+    return Regex(regexPattern, RegexOption.IGNORE_CASE)
 }

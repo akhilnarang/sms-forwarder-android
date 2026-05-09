@@ -181,9 +181,9 @@ class SmsForwarderViewModel(
 
     fun manuallyForwardSms(sms: IncomingSms, rule: dev.akhilnarang.smsforwarder.data.ForwardingRuleEntity) {
         viewModelScope.launch {
-            val destination = destinationRepository.getDestinationById(rule.destinationId)
+            val destination = destinationRepository.getEnabledDestinationById(rule.destinationId)
             if (destination == null) {
-                _feedbackMessage.value = "Failed: Destination not found for this rule"
+                _feedbackMessage.value = "Failed: Destination is disabled or missing"
                 return@launch
             }
 

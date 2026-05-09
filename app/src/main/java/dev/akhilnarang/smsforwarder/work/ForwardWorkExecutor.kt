@@ -1,12 +1,10 @@
 package dev.akhilnarang.smsforwarder.work
 
 import dev.akhilnarang.smsforwarder.data.DeliveryStatus
-import dev.akhilnarang.smsforwarder.data.DestinationEntity
 import dev.akhilnarang.smsforwarder.data.DestinationRepository
 import dev.akhilnarang.smsforwarder.data.ForwardRecordGateway
 import dev.akhilnarang.smsforwarder.network.ForwardClientInterface
 import dev.akhilnarang.smsforwarder.settings.SettingsGateway
-import kotlinx.coroutines.flow.first
 
 import org.json.JSONObject
 
@@ -34,32 +32,21 @@ class ForwardWorkExecutor(
             return WorkResult.FAILURE
         }
 
-        var destination: DestinationEntity? = null
-        if (record.destinationId != null) {
-            destination = destinationRepository.getEnabledDestinationById(record.destinationId)
-        }
-
-        if (destination == null && record.destinationId != null) {
-            recordGateway.markFailed(recordId, "Configured destination not found")
+        if (record.destinationId == null) {
+            recordGateway.markFailed(recordId, "No destination configured for this record")
             return WorkResult.FAILURE
-        } else if (destination == null) {
-            val defaultDestinations = destinationRepository.getEnabledDestinations().first()
-            if (defaultDestinations.isNotEmpty()) {
-                destination = defaultDestinations.first()
-            } else {
-                val currentSettings = settingsGateway.currentSettings()
-                if (currentSettings.endpointUrl.isEmpty()) {
-                    recordGateway.markFailed(recordId, "No destination configured")
-                    return WorkResult.FAILURE
-                }
-            }
         }
+        val destination = destinationRepository.getEnabledDestinationById(record.destinationId)
+            ?: run {
+                recordGateway.markFailed(recordId, "Destination is missing or disabled")
+                return WorkResult.FAILURE
+            }
 
-        var url = destination?.endpointUrl ?: settingsGateway.currentSettings().endpointUrl
-        var headerName = destination?.authHeaderName ?: settingsGateway.currentSettings().authHeaderName
-        var headerValue = destination?.authHeaderValue ?: settingsGateway.currentSettings().authHeaderValue
+        var url = destination.endpointUrl
+        var headerName = destination.authHeaderName ?: ""
+        var headerValue = destination.authHeaderValue ?: ""
 
-        if (destination?.type == dev.akhilnarang.smsforwarder.data.DestinationType.TELEGRAM_PRESET) {
+        if (destination.type == dev.akhilnarang.smsforwarder.data.DestinationType.TELEGRAM_PRESET) {
             try {
                 val config = JSONObject(destination.configJson ?: "{}")
                 val botToken = config.optString("botToken", "")

@@ -15,6 +15,7 @@ import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
+import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class ForwardWorkExecutorTest {
@@ -47,13 +48,17 @@ class ForwardWorkExecutorTest {
         destination: DestinationEntity? = baseDestination,
         claimResult: Boolean = true,
         forwardResult: ForwardResult = ForwardResult.Success("OK"),
+        onForwardCalled: () -> Unit = {},
     ): Pair<ForwardWorkExecutor, RecordingGateway> {
         val gateway = RecordingGateway(record, claimResult)
         val client = object : ForwardClientInterface {
             override suspend fun forward(
                 record: ForwardRecordEntity,
                 settings: AppSettings
-            ): ForwardResult = forwardResult
+            ): ForwardResult {
+                onForwardCalled()
+                return forwardResult
+            }
         }
         val settings = object : SettingsGateway {
             override fun currentSettings(): AppSettings = AppSettings()
@@ -117,6 +122,20 @@ class ForwardWorkExecutorTest {
         val (executor, _) = makeExecutor(record = null, claimResult = true)
         assertEquals(ForwardWorkExecutor.WorkResult.FAILURE, executor.execute(1L, 0))
     }
+
+    @Test
+    fun `record with null destinationId is marked FAILED instead of routed to fallback`() = runTest {
+        var forwardCalls = 0
+        val (executor, gateway) = makeExecutor(
+            record = baseRecord.copy(destinationId = null),
+            onForwardCalled = { forwardCalls++ },
+        )
+
+        assertEquals(ForwardWorkExecutor.WorkResult.FAILURE, executor.execute(1L, 0))
+        assertEquals(DeliveryStatus.FAILED, gateway.lastStatusSet)
+        assertTrue(gateway.lastError?.contains("destination", ignoreCase = true) == true)
+        assertEquals(0, forwardCalls)
+    }
 }
 
 private class RecordingGateway(
@@ -124,6 +143,7 @@ private class RecordingGateway(
     private val claimResult: Boolean,
 ) : ForwardRecordGateway {
     var lastStatusSet: DeliveryStatus? = null
+    var lastError: String? = null
 
     override suspend fun markSendingIfEligible(id: Long, attemptedAtEpochMs: Long): Boolean = claimResult
 
@@ -135,9 +155,11 @@ private class RecordingGateway(
 
     override suspend fun markFailed(id: Long, error: String) {
         lastStatusSet = DeliveryStatus.FAILED
+        lastError = error
     }
 
     override suspend fun markRetrying(id: Long, error: String) {
         lastStatusSet = DeliveryStatus.RETRYING
+        lastError = error
     }
 }

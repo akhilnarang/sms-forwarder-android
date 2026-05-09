@@ -15,6 +15,12 @@ class ForwardRecordRepository(
 
     suspend fun clearAll() = dao.deleteAll()
 
+    /**
+     * Inserts an incoming SMS as a forward record.
+     *
+     * Pass an empty `payloadJson` only for records that are about to be marked FAILED
+     * (i.e. payload build failed before enqueue). These records must never be enqueued.
+     */
     suspend fun insertIncoming(
         incomingSms: IncomingSms,
         matchedRule: ForwardingRuleEntity?,
@@ -38,6 +44,12 @@ class ForwardRecordRepository(
             ),
         )
 
+    /**
+     * Inserts a manually selected incoming SMS as a forward record.
+     *
+     * Pass an empty `payloadJson` only for records that are about to be marked FAILED
+     * (i.e. payload build failed before enqueue). These records must never be enqueued.
+     */
     suspend fun insertManualIncoming(
         incomingSms: IncomingSms,
         matchedRule: ForwardingRuleEntity?,

@@ -1,8 +1,10 @@
 package dev.akhilnarang.smsforwarder.data
 
-// Room schema export is enabled (see app/schemas/). Schemas for v1-v4 exist
-// but no migration tests were written before release. From v5 onwards, every
-// new migration MUST have a corresponding test in AppDatabaseMigrationTest.
+// Room schema export is enabled (see app/schemas/) and v1-v4 schemas are
+// captured on disk. Migration tests for v1->v2->v3->v4 were not written
+// pre-release but are now feasible against MigrationTestHelper. From v5
+// onwards, every new migration MUST have a corresponding test in
+// AppDatabaseMigrationTest.
 
 import androidx.room.Database
 import androidx.room.RoomDatabase

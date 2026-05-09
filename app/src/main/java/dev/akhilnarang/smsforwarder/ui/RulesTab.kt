@@ -89,10 +89,16 @@ internal fun RulesTab(
                             },
                             trailingContent = {
                                 Row(verticalAlignment = Alignment.CenterVertically) {
-                                    IconButton(onClick = { onMoveRuleUp(rule) }) {
+                                    IconButton(
+                                        onClick = { onMoveRuleUp(rule) },
+                                        enabled = rule.enabled
+                                    ) {
                                         Icon(Icons.Default.KeyboardArrowUp, contentDescription = "Move Up")
                                     }
-                                    IconButton(onClick = { onMoveRuleDown(rule) }) {
+                                    IconButton(
+                                        onClick = { onMoveRuleDown(rule) },
+                                        enabled = rule.enabled
+                                    ) {
                                         Icon(Icons.Default.KeyboardArrowDown, contentDescription = "Move Down")
                                     }
                                     Switch(

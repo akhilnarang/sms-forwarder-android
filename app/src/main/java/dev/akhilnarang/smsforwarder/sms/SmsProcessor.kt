@@ -65,7 +65,7 @@ class SmsProcessor(
                             return
                         }
                     } else {
-                        payloadJson = payloadFactory.createJson(incomingSms, customKeysMap)
+                        payloadJson = ""
                         val failedId = forwardRecordRepository.insertIncoming(
                             incomingSms = incomingSms,
                             matchedRule = rule,

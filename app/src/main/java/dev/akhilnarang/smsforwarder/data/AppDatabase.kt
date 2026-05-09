@@ -1,5 +1,9 @@
 package dev.akhilnarang.smsforwarder.data
 
+// Schema export was enabled at v4. Migrations 1→2→3→4 were not covered by
+// MigrationTestHelper before release. From v5 onwards, every new migration
+// MUST have a corresponding test in AppDatabaseMigrationTest.
+
 import androidx.room.Database
 import androidx.room.RoomDatabase
 import androidx.room.TypeConverter

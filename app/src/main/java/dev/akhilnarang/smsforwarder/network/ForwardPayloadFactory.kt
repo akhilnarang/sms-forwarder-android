@@ -1,5 +1,7 @@
 package dev.akhilnarang.smsforwarder.network
 
+import dev.akhilnarang.smsforwarder.data.DestinationEntity
+import dev.akhilnarang.smsforwarder.data.DestinationType
 import dev.akhilnarang.smsforwarder.sms.IncomingSms
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
@@ -117,6 +119,31 @@ class ForwardPayloadFactory {
         return regex.replace(template) { matchResult ->
             val key = matchResult.groupValues[1]
             replacements[key] ?: matchResult.value
+        }
+    }
+
+    fun buildPayloadFor(
+        destination: DestinationEntity,
+        incomingSms: IncomingSms,
+        customKeysMap: Map<String, String>,
+    ): String {
+        if (destination.type == DestinationType.TELEGRAM_PRESET) {
+            val config = JSONObject(destination.configJson ?: "{}")
+            val chatId = config.optString("chatId", "")
+            val template = destination.payloadTemplate?.takeIf { it.isNotBlank() }
+                ?: "<b>From:</b> {{sender}}\n\n{{body}}"
+            val text = createTelegramText(template, incomingSms, customKeysMap)
+            return JSONObject().apply {
+                put("chat_id", chatId)
+                put("text", text)
+                put("parse_mode", "HTML")
+            }.toString()
+        }
+        val template = destination.payloadTemplate?.takeIf { it.isNotBlank() }
+        return if (template != null) {
+            createCustomJson(template, incomingSms, customKeysMap)
+        } else {
+            createJson(incomingSms, customKeysMap)
         }
     }
 }

@@ -1,11 +1,11 @@
 package dev.akhilnarang.smsforwarder.ui
 
+import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
 import dev.akhilnarang.smsforwarder.data.DestinationEntity
 import dev.akhilnarang.smsforwarder.data.DestinationRepository
-import dev.akhilnarang.smsforwarder.data.DestinationType
 import dev.akhilnarang.smsforwarder.data.ForwardRecordEntity
 import dev.akhilnarang.smsforwarder.data.ForwardRecordRepository
 import dev.akhilnarang.smsforwarder.data.ForwardSummary
@@ -18,12 +18,12 @@ import dev.akhilnarang.smsforwarder.sms.DeviceSmsScanner
 import dev.akhilnarang.smsforwarder.sms.IncomingSms
 import dev.akhilnarang.smsforwarder.work.ForwardWorkScheduler
 import kotlinx.coroutines.flow.MutableStateFlow
-import org.json.JSONObject
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
+import org.json.JSONObject
 
 data class SmsForwarderUiState(
     val rules: List<ForwardingRuleEntity> = emptyList(),
@@ -209,23 +209,19 @@ class SmsForwarderViewModel(
                 } catch (e: Exception) {}
             }
 
-            var payloadJson = ""
-            if (destination.type == dev.akhilnarang.smsforwarder.data.DestinationType.TELEGRAM_PRESET) {
-                try {
-                    val config = JSONObject(destination.configJson ?: "{}")
-                    val chatId = config.optString("chatId", "")
-                    val template = if (!destination.payloadTemplate.isNullOrBlank()) destination.payloadTemplate else "<b>From:</b> {{sender}}\n\n{{body}}"
-                    val textStr = payloadFactory.createTelegramText(template, sms, customKeysMap)
-                    val json = JSONObject()
-                    json.put("chat_id", chatId)
-                    json.put("text", textStr)
-                    json.put("parse_mode", "HTML")
-                    payloadJson = json.toString()
-                } catch (e: Exception) { }
-            } else if (!destination.payloadTemplate.isNullOrBlank()) {
-                payloadJson = payloadFactory.createCustomJson(destination.payloadTemplate, sms, customKeysMap)
-            } else {
-                payloadJson = payloadFactory.createJson(sms, customKeysMap)
+            val payloadJson = try {
+                payloadFactory.buildPayloadFor(destination, sms, customKeysMap)
+            } catch (e: Exception) {
+                Log.w("SmsForwarderViewModel", "Failed to build payload for rule ${rule.id}", e)
+                val failedId = recordRepository.insertManualIncoming(
+                    incomingSms = sms,
+                    matchedRule = rule,
+                    destinationId = destination.id,
+                    payloadJson = "",
+                )
+                recordRepository.markFailed(failedId, "Payload build failed: ${e.message}")
+                _feedbackMessage.value = "Failed: Payload build failed"
+                return@launch
             }
 
             val recordId =

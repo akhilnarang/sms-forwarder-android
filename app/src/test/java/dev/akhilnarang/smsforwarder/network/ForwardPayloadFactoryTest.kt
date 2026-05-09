@@ -1,5 +1,7 @@
 package dev.akhilnarang.smsforwarder.network
 
+import dev.akhilnarang.smsforwarder.data.DestinationEntity
+import dev.akhilnarang.smsforwarder.data.DestinationType
 import dev.akhilnarang.smsforwarder.sms.IncomingSms
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.jsonObject
@@ -164,5 +166,60 @@ class ForwardPayloadFactoryTest {
                 customKeysMap = emptyMap(),
             )
         }
+    }
+
+    @Test
+    fun `buildPayloadFor returns telegram-shaped JSON for TELEGRAM_PRESET destination`() {
+        val factory = ForwardPayloadFactory()
+        val dest = DestinationEntity(
+            id = 1,
+            label = "tg",
+            type = DestinationType.TELEGRAM_PRESET,
+            endpointUrl = "",
+            payloadTemplate = "<b>{{sender}}</b>: {{body}}",
+            configJson = """{"botToken":"abc","chatId":"-100123"}""",
+            enabled = true,
+        )
+        val sms = makeSms(sender = "HDFC", body = "OTP 123")
+        val out = factory.buildPayloadFor(dest, sms, customKeysMap = emptyMap())
+        val parsed = JSONObject(out)
+        assertEquals("-100123", parsed.getString("chat_id"))
+        assertEquals("HTML", parsed.getString("parse_mode"))
+        assertEquals("<b>HDFC</b>: OTP 123", parsed.getString("text"))
+    }
+
+    @Test
+    fun `buildPayloadFor uses custom template when destination has one`() {
+        val factory = ForwardPayloadFactory()
+        val dest = DestinationEntity(
+            id = 1,
+            label = "wh",
+            type = DestinationType.CUSTOM_WEBHOOK,
+            endpointUrl = "https://example.com",
+            payloadTemplate = """{"sms":"{{body}}"}""",
+            configJson = null,
+            enabled = true,
+        )
+        val sms = makeSms(body = "hello")
+        val out = factory.buildPayloadFor(dest, sms, emptyMap())
+        assertEquals("hello", JSONObject(out).getString("sms"))
+    }
+
+    @Test
+    fun `buildPayloadFor returns default JSON shape when no template`() {
+        val factory = ForwardPayloadFactory()
+        val dest = DestinationEntity(
+            id = 1,
+            label = "wh",
+            type = DestinationType.CUSTOM_WEBHOOK,
+            endpointUrl = "https://example.com",
+            payloadTemplate = null,
+            configJson = null,
+            enabled = true,
+        )
+        val sms = makeSms(sender = "S", body = "hello")
+        val parsed = JSONObject(factory.buildPayloadFor(dest, sms, emptyMap()))
+        assertEquals("hello", parsed.getString("body"))
+        assertEquals("S", parsed.getString("sender"))
     }
 }

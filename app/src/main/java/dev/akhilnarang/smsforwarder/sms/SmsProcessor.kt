@@ -51,36 +51,18 @@ class SmsProcessor(
                     // Retrieve destination to check for custom payload template
                     val destination = destinationDao.getById(rule.destinationId)
                     if (destination != null) {
-                        if (destination.type == dev.akhilnarang.smsforwarder.data.DestinationType.TELEGRAM_PRESET) {
-                            try {
-                                val config = JSONObject(destination.configJson ?: "{}")
-                                val chatId = config.optString("chatId", "")
-                                val template = if (!destination.payloadTemplate.isNullOrBlank()) destination.payloadTemplate else "<b>From:</b> {{sender}}\n\n{{body}}"
-                                val textStr = payloadFactory.createTelegramText(template, incomingSms, customKeysMap)
-                                val json = JSONObject()
-                                json.put("chat_id", chatId)
-                                json.put("text", textStr)
-                                json.put("parse_mode", "HTML")
-                                payloadJson = json.toString()
-                            } catch (e: Exception) {
-                                Log.w("SmsProcessor", "Failed to build Telegram payload for rule ${rule.id}", e)
-                                val failedId =
-                                    forwardRecordRepository.insertIncoming(
-                                        incomingSms = incomingSms,
-                                        matchedRule = rule,
-                                        destinationId = destinationId,
-                                        payloadJson = "",
-                                    )
-                                forwardRecordRepository.markFailed(
-                                    failedId,
-                                    "Telegram payload build failed: ${e.message}",
-                                )
-                                return
-                            }
-                        } else if (!destination.payloadTemplate.isNullOrBlank()) {
-                            payloadJson = payloadFactory.createCustomJson(destination.payloadTemplate, incomingSms, customKeysMap)
-                        } else {
-                            payloadJson = payloadFactory.createJson(incomingSms, customKeysMap)
+                        payloadJson = try {
+                            payloadFactory.buildPayloadFor(destination, incomingSms, customKeysMap)
+                        } catch (e: Exception) {
+                            Log.w("SmsProcessor", "Failed to build payload for rule ${rule.id}", e)
+                            val failedId = forwardRecordRepository.insertIncoming(
+                                incomingSms = incomingSms,
+                                matchedRule = rule,
+                                destinationId = destinationId,
+                                payloadJson = "",
+                            )
+                            forwardRecordRepository.markFailed(failedId, "Payload build failed: ${e.message}")
+                            return
                         }
                     } else {
                         payloadJson = payloadFactory.createJson(incomingSms, customKeysMap)

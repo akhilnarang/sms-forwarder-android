@@ -75,7 +75,7 @@ class SmsProcessorTest {
         assertEquals(1, recordDao.insertedCount)
         assertEquals("", record.payloadJson)
         assertEquals(DeliveryStatus.FAILED, record.status)
-        assertTrue(record.responseDetails!!.contains("Telegram"))
+        assertTrue(record.responseDetails!!.contains("Payload build failed"))
         assertTrue("scheduler must not be invoked when payload build fails", recordingScheduler.enqueued.isEmpty())
     }
 }

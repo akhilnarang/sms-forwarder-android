@@ -32,11 +32,13 @@ import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
 import dev.akhilnarang.smsforwarder.data.DestinationEntity
 import dev.akhilnarang.smsforwarder.data.DestinationType
+import dev.akhilnarang.smsforwarder.data.ForwardingRuleEntity
 import org.json.JSONObject
 
 @Composable
 internal fun DestinationsTab(
     destinations: List<DestinationEntity>,
+    rules: List<ForwardingRuleEntity>,
     onAddDestination: (String, DestinationType, String, String, String, String, String) -> Unit,
     onEditDestination: (Long, String, DestinationType, String, String, String, String, String) -> Unit,
     onSetDestinationEnabled: (DestinationEntity, Boolean) -> Unit,
@@ -59,17 +61,20 @@ internal fun DestinationsTab(
                 verticalArrangement = Arrangement.spacedBy(12.dp)
             ) {
                 items(destinations, key = { it.id }) { dest ->
+                    var pendingDelete by remember { mutableStateOf(false) }
                     val dismissState = rememberSwipeToDismissBoxState(
                         confirmValueChange = { value ->
-                            if (value == SwipeToDismissBoxValue.EndToStart || value == SwipeToDismissBoxValue.StartToEnd) {
-                                onDeleteDestination(dest.id)
-                                true
+                            if (value == SwipeToDismissBoxValue.EndToStart) {
+                                pendingDelete = true
+                                false
                             } else false
                         }
                     )
                     
                     SwipeToDismissBox(
                         state = dismissState,
+                        enableDismissFromStartToEnd = false,
+                        enableDismissFromEndToStart = true,
                         backgroundContent = {
                             Box(
                                 modifier = Modifier
@@ -86,25 +91,59 @@ internal fun DestinationsTab(
                                 )
                             }
                         },
-        content = {
-            ElevatedCard(
-                modifier = Modifier.fillMaxWidth(),
-                onClick = { editDestination = dest }
-            ) {
-                ListItem(
-                    headlineContent = { Text(dest.label, fontWeight = FontWeight.SemiBold) },
-                    overlineContent = { Text(dest.type.name) },
-                    supportingContent = { Text(if (dest.type == DestinationType.TELEGRAM_PRESET) "Telegram Bot" else dest.endpointUrl) },
-                    trailingContent = {
-                        Switch(
-                            checked = dest.enabled,
-                            onCheckedChange = { onSetDestinationEnabled(dest, it) }
+                        content = {
+                            ElevatedCard(
+                                modifier = Modifier.fillMaxWidth(),
+                                onClick = { editDestination = dest }
+                            ) {
+                                ListItem(
+                                    headlineContent = { Text(dest.label, fontWeight = FontWeight.SemiBold) },
+                                    overlineContent = { Text(dest.type.name) },
+                                    supportingContent = {
+                                        Text(
+                                            if (dest.type == DestinationType.TELEGRAM_PRESET) {
+                                                "Telegram Bot"
+                                            } else {
+                                                dest.endpointUrl
+                                            }
+                                        )
+                                    },
+                                    trailingContent = {
+                                        Switch(
+                                            checked = dest.enabled,
+                                            onCheckedChange = { onSetDestinationEnabled(dest, it) }
+                                        )
+                                    }
+                                )
+                            }
+                        }
+                    )
+                    if (pendingDelete) {
+                        val affectedRuleCount = rules.count { it.destinationId == dest.id }
+                        AlertDialog(
+                            onDismissRequest = { pendingDelete = false },
+                            title = { Text("Delete destination?") },
+                            text = {
+                                Text(
+                                    if (affectedRuleCount == 0) {
+                                        "Delete \"${dest.label}\"? This cannot be undone."
+                                    } else {
+                                        "Delete \"${dest.label}\"? This will also delete $affectedRuleCount " +
+                                            "${if (affectedRuleCount == 1) "rule" else "rules"} that forward to it."
+                                    }
+                                )
+                            },
+                            confirmButton = {
+                                TextButton(onClick = {
+                                    onDeleteDestination(dest.id)
+                                    pendingDelete = false
+                                }) { Text("Delete") }
+                            },
+                            dismissButton = {
+                                TextButton(onClick = { pendingDelete = false }) { Text("Cancel") }
+                            },
                         )
                     }
-                )
-            }
-        }
-                    )
                 }
             }
         }

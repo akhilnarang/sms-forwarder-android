@@ -115,6 +115,7 @@ fun SmsForwarderScreen(
                         0 ->
                             DestinationsTab(
                                 destinations = uiState.destinations,
+                                rules = uiState.rules,
                                 onAddDestination = { label, type, url, authName, authVal, payload, config -> 
                                     viewModel.addDestination(
                                         dev.akhilnarang.smsforwarder.data.DestinationEntity(

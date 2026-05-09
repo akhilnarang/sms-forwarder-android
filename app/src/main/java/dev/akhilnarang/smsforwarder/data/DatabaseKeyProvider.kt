@@ -37,9 +37,14 @@ class DatabaseKeyProvider(context: Context) {
         }
 
         val passphrase = ByteArray(32).also { SecureRandom().nextBytes(it) }
-        prefs.edit()
+        val committed = prefs.edit()
             .putString(KEY_PASSPHRASE, Base64.encodeToString(passphrase, Base64.NO_WRAP))
-            .apply()
+            .commit()
+        if (!committed) {
+            throw IllegalStateException(
+                "Failed to persist database passphrase; refusing to proceed to avoid losing the encrypted DB."
+            )
+        }
         return passphrase
     }
 

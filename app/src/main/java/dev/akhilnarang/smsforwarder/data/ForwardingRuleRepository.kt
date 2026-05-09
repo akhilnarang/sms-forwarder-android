@@ -19,7 +19,7 @@ class ForwardingRuleRepository(private val ruleDao: ForwardingRuleDao) {
 
     suspend fun swapPriorityWithNeighbor(rule: ForwardingRuleEntity, direction: Int) {
         require(direction == -1 || direction == 1) { "direction must be -1 or 1" }
-        val all = ruleDao.getEnabledRules()
+        val all = ruleDao.getAllSuspend()
         val currentIndex = all.indexOfFirst { it.id == rule.id }
         if (currentIndex < 0) return
         val neighborIndex = currentIndex + direction

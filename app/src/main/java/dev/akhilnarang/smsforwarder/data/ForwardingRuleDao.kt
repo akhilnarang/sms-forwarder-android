@@ -13,6 +13,9 @@ interface ForwardingRuleDao {
     @Query("SELECT * FROM forwarding_rules ORDER BY priority ASC, id ASC")
     fun getAll(): Flow<List<ForwardingRuleEntity>>
 
+    @Query("SELECT * FROM forwarding_rules ORDER BY priority ASC, id ASC")
+    suspend fun getAllSuspend(): List<ForwardingRuleEntity>
+
     @Query("SELECT * FROM forwarding_rules WHERE enabled = 1 ORDER BY priority ASC, id ASC")
     suspend fun getEnabledRules(): List<ForwardingRuleEntity>
 

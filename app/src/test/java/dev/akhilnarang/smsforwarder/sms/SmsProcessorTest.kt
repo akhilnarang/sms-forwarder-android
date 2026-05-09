@@ -140,6 +140,8 @@ private class FakeForwardingRuleDao(
 ) : ForwardingRuleDao {
     override fun getAll(): Flow<List<ForwardingRuleEntity>> = flowOf(enabledRules)
 
+    override suspend fun getAllSuspend(): List<ForwardingRuleEntity> = enabledRules
+
     override suspend fun getEnabledRules(): List<ForwardingRuleEntity> = enabledRules
 
     override suspend fun getMaxPriority(): Int? = enabledRules.maxOfOrNull { it.priority }

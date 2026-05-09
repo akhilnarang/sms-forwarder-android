@@ -17,7 +17,7 @@ class SmsForwardClient : ForwardClientInterface {
     private val client =
         OkHttpClient.Builder()
             .connectTimeout(DEFAULT_CONNECT_TIMEOUT_SECONDS.toLong(), TimeUnit.SECONDS)
-            .writeTimeout(DEFAULT_READ_TIMEOUT_SECONDS.toLong(), TimeUnit.SECONDS)
+            .writeTimeout(DEFAULT_WRITE_TIMEOUT_SECONDS.toLong(), TimeUnit.SECONDS)
             .readTimeout(DEFAULT_READ_TIMEOUT_SECONDS.toLong(), TimeUnit.SECONDS)
             .build()
 
@@ -94,6 +94,7 @@ class SmsForwardClient : ForwardClientInterface {
         const val MAX_ERROR_RESPONSE_CHARS = 500
         const val DEFAULT_CONNECT_TIMEOUT_SECONDS = 15
         const val DEFAULT_READ_TIMEOUT_SECONDS = 15
+        const val DEFAULT_WRITE_TIMEOUT_SECONDS = 15
         val JSON_MEDIA_TYPE = "application/json; charset=utf-8".toMediaType()
     }
 }

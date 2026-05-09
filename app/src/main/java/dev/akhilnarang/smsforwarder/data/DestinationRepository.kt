@@ -5,7 +5,12 @@ import kotlinx.coroutines.flow.Flow
 class DestinationRepository(private val destinationDao: DestinationDao) {
     fun getAllDestinations(): Flow<List<DestinationEntity>> = destinationDao.getAll()
 
+    fun getEnabledDestinations(): Flow<List<DestinationEntity>> = destinationDao.getEnabled()
+
     suspend fun getDestinationById(id: Long): DestinationEntity? = destinationDao.getById(id)
+
+    suspend fun getEnabledDestinationById(id: Long): DestinationEntity? =
+        destinationDao.getByIdIfEnabled(id)
 
     suspend fun addDestination(destination: DestinationEntity): Long {
         return destinationDao.insert(destination)

@@ -78,6 +78,55 @@ class SmsProcessorTest {
         assertTrue(record.responseDetails!!.contains("Payload build failed"))
         assertTrue("scheduler must not be invoked when payload build fails", recordingScheduler.enqueued.isEmpty())
     }
+
+    @Test
+    fun `rule pointing at disabled destination causes FAILED record without enqueue`() = runTest {
+        val rule =
+            ForwardingRuleEntity(
+                id = 8L,
+                priority = 0,
+                label = "Disabled destination",
+                senderPattern = "*BANK",
+                bodyContains = "*OTP*",
+                destinationId = 1L,
+                enabled = true,
+            )
+        val destination =
+            DestinationEntity(
+                id = 1L,
+                label = "Disabled",
+                type = DestinationType.CUSTOM_WEBHOOK,
+                endpointUrl = "https://example.com/disabled",
+                enabled = false,
+            )
+        val recordDao = RecordingForwardRecordDao()
+        val scheduler = RecordingForwardWorkScheduler(context)
+        val processor =
+            SmsProcessor(
+                ruleDao = FakeForwardingRuleDao(listOf(rule)),
+                destinationDao = FakeDestinationDao(destination),
+                forwardRecordRepository = ForwardRecordRepository(recordDao),
+                payloadFactory = ForwardPayloadFactory(),
+                workScheduler = scheduler,
+            )
+
+        processor.handleIncomingSms(
+            IncomingSms(
+                senderRaw = "MYBANK",
+                senderNormalized = "MYBANK",
+                body = "Your OTP is 123456",
+                receivedAtEpochMs = 1_000L,
+                subscriptionId = null,
+                multipart = false,
+            ),
+        )
+
+        val record = recordDao.getById(100L)!!
+        assertEquals(1, recordDao.insertedCount)
+        assertEquals(DeliveryStatus.FAILED, record.status)
+        assertTrue(record.responseDetails!!.contains("destination", ignoreCase = true))
+        assertTrue("scheduler must not be invoked for disabled destination", scheduler.enqueued.isEmpty())
+    }
 }
 
 private class RecordingForwardWorkScheduler(context: Context) : ForwardWorkScheduler(context) {
@@ -109,6 +158,12 @@ private class FakeDestinationDao(
 
     override suspend fun getById(id: Long): DestinationEntity? =
         destination.takeIf { it.id == id }
+
+    override fun getEnabled(): Flow<List<DestinationEntity>> =
+        flowOf(listOf(destination).filter { it.enabled })
+
+    override suspend fun getByIdIfEnabled(id: Long): DestinationEntity? =
+        destination.takeIf { it.id == id && it.enabled }
 
     override suspend fun insert(destination: DestinationEntity): Long = destination.id
 

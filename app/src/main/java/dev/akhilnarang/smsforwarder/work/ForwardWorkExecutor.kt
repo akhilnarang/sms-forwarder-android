@@ -1,11 +1,11 @@
 package dev.akhilnarang.smsforwarder.work
 
 import dev.akhilnarang.smsforwarder.data.DeliveryStatus
+import dev.akhilnarang.smsforwarder.data.DestinationEntity
+import dev.akhilnarang.smsforwarder.data.DestinationRepository
 import dev.akhilnarang.smsforwarder.data.ForwardRecordGateway
 import dev.akhilnarang.smsforwarder.network.ForwardClientInterface
 import dev.akhilnarang.smsforwarder.settings.SettingsGateway
-import dev.akhilnarang.smsforwarder.data.DestinationRepository
-import dev.akhilnarang.smsforwarder.data.DestinationEntity
 import kotlinx.coroutines.flow.first
 
 import org.json.JSONObject
@@ -36,23 +36,23 @@ class ForwardWorkExecutor(
 
         var destination: DestinationEntity? = null
         if (record.destinationId != null) {
-            destination = destinationRepository.getDestinationById(record.destinationId)
+            destination = destinationRepository.getEnabledDestinationById(record.destinationId)
         }
 
         if (destination == null && record.destinationId != null) {
             recordGateway.markFailed(recordId, "Configured destination not found")
             return WorkResult.FAILURE
         } else if (destination == null) {
-             val defaultDestinations = destinationRepository.getAllDestinations().first()
-             if (defaultDestinations.isNotEmpty()) {
-                 destination = defaultDestinations.first()
-             } else {
-                 val currentSettings = settingsGateway.currentSettings()
-                 if (currentSettings.endpointUrl.isEmpty()) {
-                     recordGateway.markFailed(recordId, "No destination configured")
-                     return WorkResult.FAILURE
-                 }
-             }
+            val defaultDestinations = destinationRepository.getEnabledDestinations().first()
+            if (defaultDestinations.isNotEmpty()) {
+                destination = defaultDestinations.first()
+            } else {
+                val currentSettings = settingsGateway.currentSettings()
+                if (currentSettings.endpointUrl.isEmpty()) {
+                    recordGateway.markFailed(recordId, "No destination configured")
+                    return WorkResult.FAILURE
+                }
+            }
         }
 
         var url = destination?.endpointUrl ?: settingsGateway.currentSettings().endpointUrl

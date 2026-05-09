@@ -140,7 +140,7 @@ fun SmsForwarderScreen(
                                             authHeaderValue = authVal.takeIf { it.isNotBlank() },
                                             payloadTemplate = payload.takeIf { it.isNotBlank() },
                                             configJson = config.takeIf { it.isNotBlank() },
-                                            enabled = true
+                                            enabled = uiState.destinations.find { it.id == id }?.enabled ?: true
                                         )
                                     )
                                 },

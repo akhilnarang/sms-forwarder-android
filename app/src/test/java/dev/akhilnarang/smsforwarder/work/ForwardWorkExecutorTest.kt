@@ -61,6 +61,10 @@ class ForwardWorkExecutorTest {
         val destDao = object : DestinationDao {
             override fun getAll(): Flow<List<DestinationEntity>> = flowOf()
             override suspend fun getById(id: Long): DestinationEntity? = destination
+            override fun getEnabled(): Flow<List<DestinationEntity>> =
+                flowOf(listOfNotNull(destination).filter { it.enabled })
+            override suspend fun getByIdIfEnabled(id: Long): DestinationEntity? =
+                destination?.takeIf { it.id == id && it.enabled }
             override suspend fun insert(destination: DestinationEntity): Long = 1L
             override suspend fun update(destination: DestinationEntity) {}
             override suspend fun delete(destination: DestinationEntity) {}

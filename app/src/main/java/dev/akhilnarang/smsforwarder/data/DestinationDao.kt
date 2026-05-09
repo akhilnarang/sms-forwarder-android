@@ -16,6 +16,12 @@ interface DestinationDao {
     @Query("SELECT * FROM destinations WHERE id = :id")
     suspend fun getById(id: Long): DestinationEntity?
 
+    @Query("SELECT * FROM destinations WHERE enabled = 1")
+    fun getEnabled(): Flow<List<DestinationEntity>>
+
+    @Query("SELECT * FROM destinations WHERE id = :id AND enabled = 1")
+    suspend fun getByIdIfEnabled(id: Long): DestinationEntity?
+
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insert(destination: DestinationEntity): Long
 

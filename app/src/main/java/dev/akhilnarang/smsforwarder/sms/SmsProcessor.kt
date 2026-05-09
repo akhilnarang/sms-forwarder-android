@@ -48,8 +48,8 @@ class SmsProcessor(
                         }
                     }
                     
-                    // Retrieve destination to check for custom payload template
-                    val destination = destinationDao.getById(rule.destinationId)
+                    // Retrieve enabled destination to check for custom payload template
+                    val destination = destinationDao.getByIdIfEnabled(rule.destinationId)
                     if (destination != null) {
                         payloadJson = try {
                             payloadFactory.buildPayloadFor(destination, incomingSms, customKeysMap)
@@ -66,6 +66,14 @@ class SmsProcessor(
                         }
                     } else {
                         payloadJson = payloadFactory.createJson(incomingSms, customKeysMap)
+                        val failedId = forwardRecordRepository.insertIncoming(
+                            incomingSms = incomingSms,
+                            matchedRule = rule,
+                            destinationId = destinationId,
+                            payloadJson = payloadJson,
+                        )
+                        forwardRecordRepository.markFailed(failedId, "Configured destination not found")
+                        return
                     }
                     break
                 }

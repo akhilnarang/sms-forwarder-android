@@ -14,7 +14,7 @@ class ForwardingRuleRepository(private val ruleDao: ForwardingRuleDao) {
     }
     
     suspend fun updateRule(rule: ForwardingRuleEntity) {
-        ruleDao.insert(rule) // using replace strategy
+        ruleDao.update(rule)
     }
 
     suspend fun swapPriorityWithNeighbor(rule: ForwardingRuleEntity, direction: Int) {

@@ -159,7 +159,8 @@ fun SmsForwarderScreen(
                                 onEditRule = viewModel::updateRule,
                                 onSetRuleEnabled = viewModel::setRuleEnabled,
                                 onDeleteRule = viewModel::deleteRule,
-                                onUpdateRulePriority = viewModel::updateRulePriority,
+                                onMoveRuleUp = viewModel::moveRuleUp,
+                                onMoveRuleDown = viewModel::moveRuleDown,
                             )
                         2 ->
                             QueueTab(

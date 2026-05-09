@@ -17,8 +17,21 @@ class ForwardingRuleRepository(private val ruleDao: ForwardingRuleDao) {
         ruleDao.insert(rule) // using replace strategy
     }
 
-    suspend fun updateRulePriority(rule: ForwardingRuleEntity, newPriority: Int) {
-        ruleDao.update(rule.copy(priority = newPriority))
+    suspend fun swapPriorityWithNeighbor(rule: ForwardingRuleEntity, direction: Int) {
+        require(direction == -1 || direction == 1) { "direction must be -1 or 1" }
+        val all = ruleDao.getEnabledRules()
+        val currentIndex = all.indexOfFirst { it.id == rule.id }
+        if (currentIndex < 0) return
+        val neighborIndex = currentIndex + direction
+        if (neighborIndex !in all.indices) return
+        val neighbor = all[neighborIndex]
+        if (neighbor.priority == rule.priority) {
+            // Both have same priority due to historical tie; bump rule to break it.
+            ruleDao.update(rule.copy(priority = rule.priority + direction))
+            return
+        }
+        ruleDao.update(rule.copy(priority = neighbor.priority))
+        ruleDao.update(neighbor.copy(priority = rule.priority))
     }
 
     suspend fun setEnabled(rule: ForwardingRuleEntity, isEnabled: Boolean) {

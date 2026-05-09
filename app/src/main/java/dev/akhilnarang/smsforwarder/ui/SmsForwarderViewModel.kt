@@ -161,9 +161,15 @@ class SmsForwarderViewModel(
         }
     }
 
-    fun updateRulePriority(rule: ForwardingRuleEntity, priority: Int) {
+    fun moveRuleUp(rule: ForwardingRuleEntity) {
         viewModelScope.launch {
-            ruleRepository.updateRulePriority(rule, priority)
+            ruleRepository.swapPriorityWithNeighbor(rule, direction = -1)
+        }
+    }
+
+    fun moveRuleDown(rule: ForwardingRuleEntity) {
+        viewModelScope.launch {
+            ruleRepository.swapPriorityWithNeighbor(rule, direction = 1)
         }
     }
 

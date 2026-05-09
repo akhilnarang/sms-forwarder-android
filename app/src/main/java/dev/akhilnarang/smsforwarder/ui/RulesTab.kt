@@ -52,7 +52,8 @@ internal fun RulesTab(
     onEditRule: (ForwardingRuleEntity) -> Unit,
     onSetRuleEnabled: (ForwardingRuleEntity, Boolean) -> Unit,
     onDeleteRule: (ForwardingRuleEntity) -> Unit,
-    onUpdateRulePriority: (ForwardingRuleEntity, Int) -> Unit,
+    onMoveRuleUp: (ForwardingRuleEntity) -> Unit,
+    onMoveRuleDown: (ForwardingRuleEntity) -> Unit,
 ) {
     var showAddDialog by remember { mutableStateOf(false) }
     var editRule by remember { mutableStateOf<ForwardingRuleEntity?>(null) }
@@ -88,10 +89,10 @@ internal fun RulesTab(
                             },
                             trailingContent = {
                                 Row(verticalAlignment = Alignment.CenterVertically) {
-                                    IconButton(onClick = { onUpdateRulePriority(rule, rule.priority - 1) }) {
+                                    IconButton(onClick = { onMoveRuleUp(rule) }) {
                                         Icon(Icons.Default.KeyboardArrowUp, contentDescription = "Move Up")
                                     }
-                                    IconButton(onClick = { onUpdateRulePriority(rule, rule.priority + 1) }) {
+                                    IconButton(onClick = { onMoveRuleDown(rule) }) {
                                         Icon(Icons.Default.KeyboardArrowDown, contentDescription = "Move Down")
                                     }
                                     Switch(

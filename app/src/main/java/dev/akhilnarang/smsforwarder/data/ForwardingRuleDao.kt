@@ -10,10 +10,10 @@ import kotlinx.coroutines.flow.Flow
 
 @Dao
 interface ForwardingRuleDao {
-    @Query("SELECT * FROM forwarding_rules ORDER BY priority ASC")
+    @Query("SELECT * FROM forwarding_rules ORDER BY priority ASC, id ASC")
     fun getAll(): Flow<List<ForwardingRuleEntity>>
 
-    @Query("SELECT * FROM forwarding_rules WHERE enabled = 1 ORDER BY priority ASC")
+    @Query("SELECT * FROM forwarding_rules WHERE enabled = 1 ORDER BY priority ASC, id ASC")
     suspend fun getEnabledRules(): List<ForwardingRuleEntity>
 
     @Query("SELECT MAX(priority) FROM forwarding_rules")

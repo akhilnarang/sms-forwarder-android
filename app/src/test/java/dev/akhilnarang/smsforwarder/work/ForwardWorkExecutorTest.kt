@@ -8,8 +8,6 @@ import dev.akhilnarang.smsforwarder.data.ForwardRecordEntity
 import dev.akhilnarang.smsforwarder.data.ForwardRecordGateway
 import dev.akhilnarang.smsforwarder.network.ForwardClientInterface
 import dev.akhilnarang.smsforwarder.network.ForwardResult
-import dev.akhilnarang.smsforwarder.settings.AppSettings
-import dev.akhilnarang.smsforwarder.settings.SettingsGateway
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.test.runTest
@@ -49,19 +47,20 @@ class ForwardWorkExecutorTest {
         claimResult: Boolean = true,
         forwardResult: ForwardResult = ForwardResult.Success("OK"),
         onForwardCalled: () -> Unit = {},
+        onForwardConfig: (String, String, String) -> Unit = { _, _, _ -> },
     ): Pair<ForwardWorkExecutor, RecordingGateway> {
         val gateway = RecordingGateway(record, claimResult)
         val client = object : ForwardClientInterface {
             override suspend fun forward(
                 record: ForwardRecordEntity,
-                settings: AppSettings
+                endpointUrl: String,
+                authHeaderName: String,
+                authHeaderValue: String,
             ): ForwardResult {
                 onForwardCalled()
+                onForwardConfig(endpointUrl, authHeaderName, authHeaderValue)
                 return forwardResult
             }
-        }
-        val settings = object : SettingsGateway {
-            override fun currentSettings(): AppSettings = AppSettings()
         }
         val destDao = object : DestinationDao {
             override fun getAll(): Flow<List<DestinationEntity>> = flowOf()
@@ -75,7 +74,7 @@ class ForwardWorkExecutorTest {
             override suspend fun delete(destination: DestinationEntity) {}
         }
         val destRepo = DestinationRepository(destDao)
-        return ForwardWorkExecutor(gateway, settings, client, destRepo) to gateway
+        return ForwardWorkExecutor(gateway, client, destRepo) to gateway
     }
 
     @Test
@@ -135,6 +134,32 @@ class ForwardWorkExecutorTest {
         assertEquals(DeliveryStatus.FAILED, gateway.lastStatusSet)
         assertTrue(gateway.lastError?.contains("destination", ignoreCase = true) == true)
         assertEquals(0, forwardCalls)
+    }
+
+    @Test
+    fun `forwards using destination endpoint and auth header`() = runTest {
+        var capturedEndpoint: String? = null
+        var capturedHeaderName: String? = null
+        var capturedHeaderValue: String? = null
+        val destination =
+            baseDestination.copy(
+                endpointUrl = "https://example.com/hook",
+                authHeaderName = "Authorization",
+                authHeaderValue = "Bearer token",
+            )
+        val (executor, _) = makeExecutor(
+            destination = destination,
+            onForwardConfig = { endpointUrl, authHeaderName, authHeaderValue ->
+                capturedEndpoint = endpointUrl
+                capturedHeaderName = authHeaderName
+                capturedHeaderValue = authHeaderValue
+            },
+        )
+
+        assertEquals(ForwardWorkExecutor.WorkResult.SUCCESS, executor.execute(1L, 0))
+        assertEquals("https://example.com/hook", capturedEndpoint)
+        assertEquals("Authorization", capturedHeaderName)
+        assertEquals("Bearer token", capturedHeaderValue)
     }
 }
 

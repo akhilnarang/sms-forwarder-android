@@ -4,13 +4,11 @@ import dev.akhilnarang.smsforwarder.data.DeliveryStatus
 import dev.akhilnarang.smsforwarder.data.DestinationRepository
 import dev.akhilnarang.smsforwarder.data.ForwardRecordGateway
 import dev.akhilnarang.smsforwarder.network.ForwardClientInterface
-import dev.akhilnarang.smsforwarder.settings.SettingsGateway
 
 import org.json.JSONObject
 
 class ForwardWorkExecutor(
     private val recordGateway: ForwardRecordGateway,
-    private val settingsGateway: SettingsGateway,
     private val forwardClient: ForwardClientInterface,
     private val destinationRepository: DestinationRepository
 ) {
@@ -59,17 +57,10 @@ class ForwardWorkExecutor(
         // Use the exact payload saved in the record during SmsProcessor
         val payloadToSend = record.payloadJson
 
-        // Create a temporary settings object to pass to the client
-        val tempSettings = settingsGateway.currentSettings().copy(
-            endpointUrl = url,
-            authHeaderName = headerName,
-            authHeaderValue = headerValue
-        )
-
         // Pass the updated payload inside the record
         val modifiedRecord = record.copy(payloadJson = payloadToSend)
 
-        val result = forwardClient.forward(modifiedRecord, tempSettings)
+        val result = forwardClient.forward(modifiedRecord, url, headerName, headerValue)
 
         return when (result) {
             is dev.akhilnarang.smsforwarder.network.ForwardResult.Success -> {

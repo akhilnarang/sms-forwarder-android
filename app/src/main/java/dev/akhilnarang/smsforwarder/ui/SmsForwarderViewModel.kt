@@ -12,8 +12,6 @@ import dev.akhilnarang.smsforwarder.data.ForwardSummary
 import dev.akhilnarang.smsforwarder.data.ForwardingRuleEntity
 import dev.akhilnarang.smsforwarder.data.ForwardingRuleRepository
 import dev.akhilnarang.smsforwarder.network.ForwardPayloadFactory
-import dev.akhilnarang.smsforwarder.settings.AppSettings
-import dev.akhilnarang.smsforwarder.settings.SettingsRepository
 import dev.akhilnarang.smsforwarder.sms.DeviceSmsScanner
 import dev.akhilnarang.smsforwarder.sms.IncomingSms
 import dev.akhilnarang.smsforwarder.work.ForwardWorkScheduler
@@ -30,7 +28,6 @@ data class SmsForwarderUiState(
     val destinations: List<DestinationEntity> = emptyList(),
     val forwardRecords: List<ForwardRecordEntity> = emptyList(),
     val forwardSummary: ForwardSummary = ForwardSummary(),
-    val settings: AppSettings = AppSettings(),
     val feedbackMessage: String? = null,
     val deviceSmsMessages: List<IncomingSms> = emptyList(),
     val smsSearchQuery: String = ""
@@ -40,7 +37,6 @@ class SmsForwarderViewModel(
     private val ruleRepository: ForwardingRuleRepository,
     private val destinationRepository: DestinationRepository,
     private val recordRepository: ForwardRecordRepository,
-    private val settingsRepository: SettingsRepository,
     private val deviceSmsScanner: DeviceSmsScanner,
     private val payloadFactory: ForwardPayloadFactory,
     private val workScheduler: ForwardWorkScheduler,
@@ -56,7 +52,6 @@ class SmsForwarderViewModel(
             destinationRepository.getAllDestinations(),
             recordRepository.observeAll(),
             recordRepository.observeSummary(),
-            settingsRepository.observeSettings(),
             _feedbackMessage,
             _deviceSmsMessages,
             _smsSearchQuery
@@ -65,10 +60,9 @@ class SmsForwarderViewModel(
             val destinations = args[1] as List<DestinationEntity>
             val records = args[2] as List<ForwardRecordEntity>
             val summary = args[3] as ForwardSummary
-            val settings = args[4] as AppSettings
-            val feedbackMessage = args[5] as String?
-            val deviceSmsMessages = args[6] as List<IncomingSms>
-            val smsSearchQuery = args[7] as String
+            val feedbackMessage = args[4] as String?
+            val deviceSmsMessages = args[5] as List<IncomingSms>
+            val smsSearchQuery = args[6] as String
             
             val filteredDeviceSms = if (smsSearchQuery.isBlank()) {
                 deviceSmsMessages
@@ -85,7 +79,6 @@ class SmsForwarderViewModel(
                 destinations = destinations,
                 forwardRecords = records,
                 forwardSummary = summary,
-                settings = settings,
                 feedbackMessage = feedbackMessage,
                 deviceSmsMessages = filteredDeviceSms,
                 smsSearchQuery = smsSearchQuery
@@ -98,17 +91,6 @@ class SmsForwarderViewModel(
 
     fun clearFeedbackMessage() {
         _feedbackMessage.value = null
-    }
-
-    fun updateSettings(settings: AppSettings) {
-        settingsRepository.saveSettings(
-            endpointUrl = settings.endpointUrl,
-            authHeaderName = settings.authHeaderName,
-            authHeaderValue = settings.authHeaderValue,
-            connectTimeoutSeconds = settings.connectTimeoutSeconds,
-            readTimeoutSeconds = settings.readTimeoutSeconds
-        )
-        _feedbackMessage.value = "Settings saved successfully"
     }
 
     // Destinations
@@ -259,7 +241,6 @@ class SmsForwarderViewModel(
                         ruleRepository = container.ruleRepository,
                         destinationRepository = container.destinationRepository,
                         recordRepository = container.forwardRecordRepository,
-                        settingsRepository = container.settingsRepository,
                         deviceSmsScanner = container.deviceSmsScanner,
                         payloadFactory = container.payloadFactory,
                         workScheduler = container.workScheduler,

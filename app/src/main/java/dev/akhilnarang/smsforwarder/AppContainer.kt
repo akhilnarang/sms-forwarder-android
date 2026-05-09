@@ -9,7 +9,6 @@ import dev.akhilnarang.smsforwarder.data.ForwardRecordRepository
 import dev.akhilnarang.smsforwarder.data.ForwardingRuleRepository
 import dev.akhilnarang.smsforwarder.network.ForwardPayloadFactory
 import dev.akhilnarang.smsforwarder.network.SmsForwardClient
-import dev.akhilnarang.smsforwarder.settings.SettingsRepository
 import dev.akhilnarang.smsforwarder.sms.DeviceSmsScanner
 import dev.akhilnarang.smsforwarder.sms.SmsProcessor
 import dev.akhilnarang.smsforwarder.work.ForwardWorkScheduler
@@ -34,7 +33,6 @@ class AppContainer(context: Context) {
                 .build()
     }
 
-    val settingsRepository = SettingsRepository(appContext)
     val destinationRepository = DestinationRepository(database.destinationDao())
     val ruleRepository = ForwardingRuleRepository(database.forwardingRuleDao())
     val forwardRecordRepository = ForwardRecordRepository(database.forwardRecordDao())

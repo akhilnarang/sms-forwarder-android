@@ -1,7 +1,6 @@
 package dev.akhilnarang.smsforwarder.network
 
 import dev.akhilnarang.smsforwarder.data.ForwardRecordEntity
-import dev.akhilnarang.smsforwarder.settings.AppSettings
 import java.io.IOException
 import java.net.SocketTimeoutException
 import java.net.UnknownHostException
@@ -15,34 +14,34 @@ import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
 
 class SmsForwardClient : ForwardClientInterface {
-    @Volatile
-    private var cachedClient: OkHttpClient? = null
-
-    @Volatile
-    private var cachedConnectTimeout: Int = -1
-
-    @Volatile
-    private var cachedReadTimeout: Int = -1
+    private val client =
+        OkHttpClient.Builder()
+            .connectTimeout(DEFAULT_CONNECT_TIMEOUT_SECONDS.toLong(), TimeUnit.SECONDS)
+            .writeTimeout(DEFAULT_READ_TIMEOUT_SECONDS.toLong(), TimeUnit.SECONDS)
+            .readTimeout(DEFAULT_READ_TIMEOUT_SECONDS.toLong(), TimeUnit.SECONDS)
+            .build()
 
     override suspend fun forward(
         record: ForwardRecordEntity,
-        settings: AppSettings,
+        endpointUrl: String,
+        authHeaderName: String,
+        authHeaderValue: String,
     ): ForwardResult =
         withContext(Dispatchers.IO) {
-            val endpoint = settings.endpointUrl.trim().toHttpUrlOrNull()
+            val endpoint = endpointUrl.trim().toHttpUrlOrNull()
                 ?: return@withContext ForwardResult.PermanentFailure("Endpoint URL is not configured or is invalid.")
             if (endpoint.scheme != HTTPS_SCHEME) {
                 return@withContext ForwardResult.PermanentFailure("Endpoint URL must use HTTPS.")
             }
 
-            if (settings.authHeaderName.isNotBlank() || settings.authHeaderValue.isNotBlank()) {
-                if (settings.authHeaderName.isBlank() || settings.authHeaderValue.isBlank()) {
+            if (authHeaderName.isNotBlank() || authHeaderValue.isNotBlank()) {
+                if (authHeaderName.isBlank() || authHeaderValue.isBlank()) {
                     return@withContext ForwardResult.PermanentFailure("Auth header is incomplete.")
                 }
-                if (!isValidHeaderName(settings.authHeaderName)) {
+                if (!isValidHeaderName(authHeaderName)) {
                     return@withContext ForwardResult.PermanentFailure("Auth header name contains unsupported characters.")
                 }
-                if (!isValidHeaderValue(settings.authHeaderValue)) {
+                if (!isValidHeaderValue(authHeaderValue)) {
                     return@withContext ForwardResult.PermanentFailure("Auth header value contains unsupported characters.")
                 }
             }
@@ -53,8 +52,8 @@ class SmsForwardClient : ForwardClientInterface {
                         .url(endpoint)
                         .post(record.payloadJson.toRequestBody(JSON_MEDIA_TYPE))
                         .apply {
-                            if (settings.authHeaderName.isNotBlank()) {
-                                header(settings.authHeaderName.trim(), settings.authHeaderValue)
+                            if (authHeaderName.isNotBlank()) {
+                                header(authHeaderName.trim(), authHeaderValue)
                             }
                         }
                         .build()
@@ -63,12 +62,6 @@ class SmsForwardClient : ForwardClientInterface {
                         "Auth header contains unsupported characters.",
                     )
                 }
-
-            val client =
-                getClient(
-                    connectTimeout = settings.connectTimeoutSeconds.coerceIn(MIN_TIMEOUT_SECONDS, MAX_TIMEOUT_SECONDS),
-                    readTimeout = settings.readTimeoutSeconds.coerceIn(MIN_TIMEOUT_SECONDS, MAX_TIMEOUT_SECONDS),
-                )
 
             try {
                 client.newCall(request).execute().use { response ->
@@ -96,33 +89,11 @@ class SmsForwardClient : ForwardClientInterface {
             }
         }
 
-    private fun getClient(connectTimeout: Int, readTimeout: Int): OkHttpClient {
-        val currentClient = cachedClient
-        if (
-            currentClient != null &&
-            cachedConnectTimeout == connectTimeout &&
-            cachedReadTimeout == readTimeout
-        ) {
-            return currentClient
-        }
-
-        return OkHttpClient.Builder()
-            .connectTimeout(connectTimeout.toLong(), TimeUnit.SECONDS)
-            .writeTimeout(readTimeout.toLong(), TimeUnit.SECONDS)
-            .readTimeout(readTimeout.toLong(), TimeUnit.SECONDS)
-            .build()
-            .also {
-                cachedClient = it
-                cachedConnectTimeout = connectTimeout
-                cachedReadTimeout = readTimeout
-            }
-    }
-
     private companion object {
         const val HTTPS_SCHEME = "https"
         const val MAX_ERROR_RESPONSE_CHARS = 500
-        const val MIN_TIMEOUT_SECONDS = 1
-        const val MAX_TIMEOUT_SECONDS = 120
+        const val DEFAULT_CONNECT_TIMEOUT_SECONDS = 15
+        const val DEFAULT_READ_TIMEOUT_SECONDS = 15
         val JSON_MEDIA_TYPE = "application/json; charset=utf-8".toMediaType()
     }
 }

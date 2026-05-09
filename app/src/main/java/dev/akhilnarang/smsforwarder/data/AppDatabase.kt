@@ -75,9 +75,6 @@ abstract class AppDatabase : RoomDatabase() {
                     """.trimIndent())
                     db.execSQL("CREATE INDEX IF NOT EXISTS `index_forwarding_rules_destinationId` ON `forwarding_rules` (`destinationId`)")
 
-                    // We need a default destination if none exists, but Room migrations shouldn't rely on SharedPreferences directly.
-                    // The AppSettings to default destination migration will happen at app startup or when accessed.
-
                     // Drop old table
                     db.execSQL("DROP TABLE IF EXISTS `configured_senders`")
                 }

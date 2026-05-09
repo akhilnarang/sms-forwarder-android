@@ -18,7 +18,6 @@ class ForwardWorker(
         val container = (applicationContext as SmsForwarderApp).container
         val executor = ForwardWorkExecutor(
             recordGateway = container.forwardRecordRepository,
-            settingsGateway = container.settingsRepository,
             forwardClient = container.forwardClient,
             destinationRepository = container.destinationRepository
         )

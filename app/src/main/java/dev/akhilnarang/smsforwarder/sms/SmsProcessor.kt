@@ -94,5 +94,5 @@ internal fun wildcardRegex(pattern: String): Regex {
     val regexPattern = pattern.split("*").joinToString(".*") {
         if (it.isEmpty()) "" else Regex.escape(it)
     }
-    return Regex(regexPattern, RegexOption.IGNORE_CASE)
+    return Regex(regexPattern, setOf(RegexOption.IGNORE_CASE, RegexOption.DOT_MATCHES_ALL))
 }

@@ -48,6 +48,18 @@ class WildcardRegexTest {
     }
 
     @Test
+    fun `wildcard star matches across newlines`() {
+        val regex = wildcardRegex("*OTP*")
+        assertTrue(regex.containsMatchIn("Your bank\nOTP is 123"))
+    }
+
+    @Test
+    fun `wildcard star spans across newlines between literals`() {
+        val regex = wildcardRegex("HDFC*OTP")
+        assertTrue(regex.containsMatchIn("HDFC bank\nyour OTP"))
+    }
+
+    @Test
     fun bare_wildcard_matches_anything() {
         val regex = wildcardRegex("*")
         assertTrue(regex.matches(""))

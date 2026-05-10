@@ -151,6 +151,8 @@ private class FakeForwardingRuleDao(
     override suspend fun update(rule: ForwardingRuleEntity) = Unit
 
     override suspend fun delete(rule: ForwardingRuleEntity) = Unit
+
+    override suspend fun deleteAll() = Unit
 }
 
 private class FakeDestinationDao(
@@ -172,6 +174,8 @@ private class FakeDestinationDao(
     override suspend fun update(destination: DestinationEntity) = Unit
 
     override suspend fun delete(destination: DestinationEntity) = Unit
+
+    override suspend fun deleteAll() = Unit
 }
 
 private class RecordingForwardRecordDao : ForwardRecordDao {

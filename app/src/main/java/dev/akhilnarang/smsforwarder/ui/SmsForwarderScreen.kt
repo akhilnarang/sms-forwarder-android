@@ -1,5 +1,7 @@
 package dev.akhilnarang.smsforwarder.ui
 
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.WindowInsets
@@ -13,17 +15,23 @@ import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Assessment
 import androidx.compose.material.icons.rounded.List
+import androidx.compose.material.icons.rounded.MoreVert
 import androidx.compose.material.icons.rounded.PhoneAndroid
 import androidx.compose.material.icons.rounded.Rule
 import androidx.compose.material.icons.rounded.Send
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.ScrollableTabRow
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Tab
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -34,10 +42,14 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import dev.akhilnarang.smsforwarder.data.ForwardRecordEntity
+import dev.akhilnarang.smsforwarder.data.ImportMode
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -51,6 +63,42 @@ fun SmsForwarderScreen(
     val snackbarHostState = remember { SnackbarHostState() }
     var selectedRecord by remember { mutableStateOf<ForwardRecordEntity?>(null) }
     val coroutineScope = rememberCoroutineScope()
+    val context = LocalContext.current
+    var menuExpanded by remember { mutableStateOf(false) }
+    var showRestoreModeDialog by remember { mutableStateOf(false) }
+
+    val backupLauncher =
+        rememberLauncherForActivityResult(
+            ActivityResultContracts.CreateDocument("application/json"),
+        ) { uri ->
+            if (uri != null) {
+                viewModel.runBackup { jsonString ->
+                    withContext(Dispatchers.IO) {
+                        context.contentResolver.openOutputStream(uri, "wt")?.use { out ->
+                            out.write(jsonString.toByteArray(Charsets.UTF_8))
+                        } ?: error("Could not open output stream")
+                    }
+                }
+            }
+        }
+
+    var pendingRestoreMode by remember { mutableStateOf<ImportMode?>(null) }
+    val restoreLauncher =
+        rememberLauncherForActivityResult(
+            ActivityResultContracts.OpenDocument(),
+        ) { uri ->
+            val mode = pendingRestoreMode
+            pendingRestoreMode = null
+            if (uri != null && mode != null) {
+                viewModel.runRestore(mode) {
+                    withContext(Dispatchers.IO) {
+                        context.contentResolver.openInputStream(uri)?.use { input ->
+                            input.readBytes().toString(Charsets.UTF_8)
+                        }
+                    }
+                }
+            }
+        }
     
     val tabs = listOf(
         "Destinations" to Icons.Rounded.Send,
@@ -74,6 +122,30 @@ fun SmsForwarderScreen(
         topBar = {
             TopAppBar(
                 title = { Text("SMS Forwarder") },
+                actions = {
+                    IconButton(onClick = { menuExpanded = true }) {
+                        Icon(Icons.Rounded.MoreVert, contentDescription = "More options")
+                    }
+                    DropdownMenu(
+                        expanded = menuExpanded,
+                        onDismissRequest = { menuExpanded = false },
+                    ) {
+                        DropdownMenuItem(
+                            text = { Text("Backup configuration") },
+                            onClick = {
+                                menuExpanded = false
+                                backupLauncher.launch(defaultBackupFileName())
+                            },
+                        )
+                        DropdownMenuItem(
+                            text = { Text("Restore configuration") },
+                            onClick = {
+                                menuExpanded = false
+                                showRestoreModeDialog = true
+                            },
+                        )
+                    }
+                },
             )
         },
         snackbarHost = { SnackbarHost(hostState = snackbarHostState) },
@@ -195,4 +267,37 @@ fun SmsForwarderScreen(
             onDismiss = { selectedRecord = null },
         )
     }
+
+    if (showRestoreModeDialog) {
+        AlertDialog(
+            onDismissRequest = { showRestoreModeDialog = false },
+            title = { Text("Restore configuration") },
+            text = {
+                Text(
+                    "Replace overwrites your current destinations and rules with the backup. " +
+                        "Merge keeps your current entries and adds the backup on top.",
+                )
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    showRestoreModeDialog = false
+                    pendingRestoreMode = ImportMode.REPLACE
+                    restoreLauncher.launch(arrayOf("application/json", "*/*"))
+                }) { Text("Replace") }
+            },
+            dismissButton = {
+                TextButton(onClick = {
+                    showRestoreModeDialog = false
+                    pendingRestoreMode = ImportMode.MERGE
+                    restoreLauncher.launch(arrayOf("application/json", "*/*"))
+                }) { Text("Merge") }
+            },
+        )
+    }
+}
+
+private fun defaultBackupFileName(): String {
+    val formatter = java.time.format.DateTimeFormatter.ofPattern("yyyyMMdd-HHmmss")
+    val ts = java.time.LocalDateTime.now().format(formatter)
+    return "sms-forwarder-backup-$ts.json"
 }

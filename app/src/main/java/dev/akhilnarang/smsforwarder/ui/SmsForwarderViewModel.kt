@@ -4,6 +4,8 @@ import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
+import dev.akhilnarang.smsforwarder.data.BackupManager
+import dev.akhilnarang.smsforwarder.data.BackupValidationException
 import dev.akhilnarang.smsforwarder.data.DestinationEntity
 import dev.akhilnarang.smsforwarder.data.DestinationRepository
 import dev.akhilnarang.smsforwarder.data.ForwardRecordEntity
@@ -11,6 +13,7 @@ import dev.akhilnarang.smsforwarder.data.ForwardRecordRepository
 import dev.akhilnarang.smsforwarder.data.ForwardSummary
 import dev.akhilnarang.smsforwarder.data.ForwardingRuleEntity
 import dev.akhilnarang.smsforwarder.data.ForwardingRuleRepository
+import dev.akhilnarang.smsforwarder.data.ImportMode
 import dev.akhilnarang.smsforwarder.network.ForwardPayloadFactory
 import dev.akhilnarang.smsforwarder.sms.DeviceSmsScanner
 import dev.akhilnarang.smsforwarder.sms.IncomingSms
@@ -40,6 +43,7 @@ class SmsForwarderViewModel(
     private val deviceSmsScanner: DeviceSmsScanner,
     private val payloadFactory: ForwardPayloadFactory,
     private val workScheduler: ForwardWorkScheduler,
+    private val backupManager: BackupManager,
 ) : ViewModel() {
 
     private val _feedbackMessage = MutableStateFlow<String?>(null)
@@ -172,6 +176,49 @@ class SmsForwarderViewModel(
         _smsSearchQuery.value = query
     }
 
+    fun runBackup(writer: suspend (String) -> Unit) {
+        viewModelScope.launch {
+            val message = try {
+                val json = backupManager.exportToJson()
+                writer(json)
+                "Backup saved"
+            } catch (e: Exception) {
+                Log.w("SmsForwarderViewModel", "Backup failed", e)
+                "Backup failed: ${e.message ?: e.javaClass.simpleName}"
+            }
+            _feedbackMessage.value = message
+        }
+    }
+
+    fun runRestore(mode: ImportMode, reader: suspend () -> String?) {
+        viewModelScope.launch {
+            val message = try {
+                val jsonString = reader()
+                    ?: throw BackupValidationException("Could not read backup file")
+                val result = backupManager.importFromJson(jsonString, mode)
+                val summary = buildString {
+                    append("Restored ")
+                    append(result.destinationsImported)
+                    append(" destination(s) and ")
+                    append(result.rulesImported)
+                    append(" rule(s)")
+                    if (result.rulesSkipped > 0) {
+                        append(" (")
+                        append(result.rulesSkipped)
+                        append(" skipped)")
+                    }
+                }
+                summary
+            } catch (e: BackupValidationException) {
+                "Restore failed: ${e.message}"
+            } catch (e: Exception) {
+                Log.w("SmsForwarderViewModel", "Restore failed", e)
+                "Restore failed: ${e.message ?: e.javaClass.simpleName}"
+            }
+            _feedbackMessage.value = message
+        }
+    }
+
     fun clearQueue() {
         viewModelScope.launch {
             recordRepository.clearAll()
@@ -244,6 +291,7 @@ class SmsForwarderViewModel(
                         deviceSmsScanner = container.deviceSmsScanner,
                         payloadFactory = container.payloadFactory,
                         workScheduler = container.workScheduler,
+                        backupManager = container.backupManager,
                     ) as T
                 }
             }

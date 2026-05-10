@@ -72,6 +72,7 @@ class ForwardWorkExecutorTest {
             override suspend fun insert(destination: DestinationEntity): Long = 1L
             override suspend fun update(destination: DestinationEntity) {}
             override suspend fun delete(destination: DestinationEntity) {}
+            override suspend fun deleteAll() {}
         }
         val destRepo = DestinationRepository(destDao)
         return ForwardWorkExecutor(gateway, client, destRepo) to gateway

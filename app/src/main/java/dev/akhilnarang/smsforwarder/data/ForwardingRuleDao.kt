@@ -30,4 +30,7 @@ interface ForwardingRuleDao {
 
     @Delete
     suspend fun delete(rule: ForwardingRuleEntity)
+
+    @Query("DELETE FROM forwarding_rules")
+    suspend fun deleteAll()
 }

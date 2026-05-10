@@ -3,6 +3,7 @@ package dev.akhilnarang.smsforwarder
 import android.content.Context
 import androidx.room.Room
 import dev.akhilnarang.smsforwarder.data.AppDatabase
+import dev.akhilnarang.smsforwarder.data.BackupManager
 import dev.akhilnarang.smsforwarder.data.DatabaseKeyProvider
 import dev.akhilnarang.smsforwarder.data.DestinationRepository
 import dev.akhilnarang.smsforwarder.data.ForwardRecordRepository
@@ -40,6 +41,14 @@ class AppContainer(context: Context) {
     val forwardClient = SmsForwardClient()
     val payloadFactory = ForwardPayloadFactory()
     val deviceSmsScanner = DeviceSmsScanner(appContext)
+
+    val backupManager: BackupManager =
+        BackupManager(
+            database = database,
+            destinationDao = database.destinationDao(),
+            ruleDao = database.forwardingRuleDao(),
+            appVersionName = BuildConfig.VERSION_NAME,
+        )
 
     val smsProcessor =
         SmsProcessor(

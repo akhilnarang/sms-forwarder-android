@@ -30,4 +30,7 @@ interface DestinationDao {
 
     @Delete
     suspend fun delete(destination: DestinationEntity)
+
+    @Query("DELETE FROM destinations")
+    suspend fun deleteAll()
 }

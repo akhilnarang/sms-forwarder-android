@@ -231,4 +231,7 @@ private class RecordingForwardRecordDao : ForwardRecordDao {
     }
 
     override fun observeSummary(): Flow<ForwardSummary> = flowOf(ForwardSummary())
+
+    override suspend fun countByStatus(status: DeliveryStatus): Int =
+        records.values.count { it.status == status }
 }

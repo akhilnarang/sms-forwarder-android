@@ -126,4 +126,6 @@ class ForwardRecordRepository(
     override suspend fun markSent(id: Long, sentAtEpochMs: Long, responseDetails: String?) {
         dao.markSent(id = id, sentAtEpochMs = sentAtEpochMs, responseDetails = responseDetails)
     }
+
+    override suspend fun countByStatus(status: DeliveryStatus): Int = dao.countByStatus(status)
 }

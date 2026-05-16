@@ -188,4 +188,6 @@ private class RecordingGateway(
         lastStatusSet = DeliveryStatus.RETRYING
         lastError = error
     }
+
+    override suspend fun countByStatus(status: DeliveryStatus): Int = 0
 }

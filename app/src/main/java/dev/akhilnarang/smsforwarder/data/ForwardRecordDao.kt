@@ -76,6 +76,9 @@ interface ForwardRecordDao {
     @Query("DELETE FROM forward_records")
     suspend fun deleteAll()
 
+    @Query("SELECT COUNT(*) FROM forward_records WHERE status = :status")
+    suspend fun countByStatus(status: dev.akhilnarang.smsforwarder.data.DeliveryStatus): Int
+
     @Query(
         """
         SELECT

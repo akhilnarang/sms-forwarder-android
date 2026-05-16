@@ -106,7 +106,7 @@ class ForwardWorkExecutorTest {
         val (executor, gateway) = makeExecutor(
             forwardResult = ForwardResult.RetryableFailure("timeout")
         )
-        assertEquals(ForwardWorkExecutor.WorkResult.FAILURE, executor.execute(1L, 5))
+        assertEquals(ForwardWorkExecutor.WorkResult.FAILURE, executor.execute(1L, 4))
         assertEquals(DeliveryStatus.FAILED, gateway.lastStatusSet)
     }
 

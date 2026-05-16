@@ -84,6 +84,6 @@ class ForwardWorkExecutor(
     }
 
     companion object {
-        private const val MAX_RETRIES = 5
+        private const val MAX_RETRIES = 4
     }
 }

@@ -37,8 +37,8 @@ open class ForwardWorkScheduler(
                 )
                 .setBackoffCriteria(
                     BackoffPolicy.EXPONENTIAL,
-                    30,
-                    TimeUnit.SECONDS,
+                    1,
+                    TimeUnit.MINUTES,
                 )
                 .build()
 

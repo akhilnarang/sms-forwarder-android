@@ -4,6 +4,7 @@ import android.content.Context
 import androidx.work.CoroutineWorker
 import androidx.work.WorkerParameters
 import dev.akhilnarang.smsforwarder.SmsForwarderApp
+import dev.akhilnarang.smsforwarder.util.NotificationHelper
 
 class ForwardWorker(
     appContext: Context,
@@ -16,10 +17,12 @@ class ForwardWorker(
         }
 
         val container = (applicationContext as SmsForwarderApp).container
+        val notificationHelper = NotificationHelper(applicationContext)
         val executor = ForwardWorkExecutor(
             recordGateway = container.forwardRecordRepository,
             forwardClient = container.forwardClient,
-            destinationRepository = container.destinationRepository
+            destinationRepository = container.destinationRepository,
+            notificationHelper = notificationHelper
         )
 
         return when (executor.execute(recordId, runAttemptCount)) {

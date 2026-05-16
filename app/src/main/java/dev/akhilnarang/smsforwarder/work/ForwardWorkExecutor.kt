@@ -4,13 +4,15 @@ import dev.akhilnarang.smsforwarder.data.DeliveryStatus
 import dev.akhilnarang.smsforwarder.data.DestinationRepository
 import dev.akhilnarang.smsforwarder.data.ForwardRecordGateway
 import dev.akhilnarang.smsforwarder.network.ForwardClientInterface
+import dev.akhilnarang.smsforwarder.util.NotificationHelper
 
 import org.json.JSONObject
 
 class ForwardWorkExecutor(
     private val recordGateway: ForwardRecordGateway,
     private val forwardClient: ForwardClientInterface,
-    private val destinationRepository: DestinationRepository
+    private val destinationRepository: DestinationRepository,
+    private val notificationHelper: NotificationHelper? = null
 ) {
     enum class WorkResult {
         SUCCESS,
@@ -73,12 +75,23 @@ class ForwardWorkExecutor(
                     WorkResult.RETRY
                 } else {
                     recordGateway.markFailed(recordId, result.message)
+                    notifyFailure()
                     WorkResult.FAILURE
                 }
             }
             is dev.akhilnarang.smsforwarder.network.ForwardResult.PermanentFailure -> {
                 recordGateway.markFailed(recordId, result.message)
+                notifyFailure()
                 WorkResult.FAILURE
+            }
+        }
+    }
+
+    private suspend fun notifyFailure() {
+        notificationHelper?.let { helper ->
+            val count = recordGateway.countByStatus(DeliveryStatus.FAILED)
+            if (count > 0) {
+                helper.showFailureNotification(count)
             }
         }
     }

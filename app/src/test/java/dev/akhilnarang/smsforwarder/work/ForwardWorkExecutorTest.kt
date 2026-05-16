@@ -75,7 +75,7 @@ class ForwardWorkExecutorTest {
             override suspend fun deleteAll() {}
         }
         val destRepo = DestinationRepository(destDao)
-        return ForwardWorkExecutor(gateway, client, destRepo) to gateway
+        return ForwardWorkExecutor(gateway, client, destRepo, null) to gateway
     }
 
     @Test

@@ -23,13 +23,16 @@ class ForwardWorkExecutor(
     suspend fun execute(recordId: Long, runAttemptCount: Int): WorkResult {
         val record = recordGateway.getById(recordId) ?: return WorkResult.FAILURE
 
-        if (record.status != DeliveryStatus.PENDING && record.status != DeliveryStatus.RETRYING) {
-            return WorkResult.SUCCESS
-        }
-
+        // markSendingIfEligible is the single authoritative gate: it atomically claims
+        // any row that is PENDING/FAILED/RETRYING, or one stuck in SENDING longer than
+        // STALE_SENDING_THRESHOLD_MS (recovering rows orphaned when the process died
+        // mid-send). If it returns false the row is genuinely not actionable here
+        // (already SENT/IGNORED, or another worker is actively sending it), so report
+        // SUCCESS to let WorkManager retire this run without a spurious failure/retry.
         val attemptedAtEpochMs = System.currentTimeMillis()
-        if (!recordGateway.markSendingIfEligible(recordId, attemptedAtEpochMs)) {
-            return WorkResult.FAILURE
+        val staleSendingBeforeEpochMs = attemptedAtEpochMs - STALE_SENDING_THRESHOLD_MS
+        if (!recordGateway.markSendingIfEligible(recordId, attemptedAtEpochMs, staleSendingBeforeEpochMs)) {
+            return WorkResult.SUCCESS
         }
 
         if (record.destinationId == null) {
@@ -98,5 +101,11 @@ class ForwardWorkExecutor(
 
     companion object {
         private const val MAX_RETRIES = 4
+
+        // A row stuck in SENDING longer than this is treated as orphaned (the process
+        // likely died mid-send) and becomes re-claimable. Kept well above the worst-case
+        // single HTTP attempt (connect + write + read timeouts in SmsForwardClient are
+        // 15s each) so a still-live in-flight send is never reclaimed out from under itself.
+        private const val STALE_SENDING_THRESHOLD_MS = 2 * 60 * 1000L
     }
 }

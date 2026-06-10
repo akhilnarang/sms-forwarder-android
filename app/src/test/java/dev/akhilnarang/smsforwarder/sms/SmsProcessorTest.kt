@@ -200,6 +200,7 @@ private class RecordingForwardRecordDao : ForwardRecordDao {
 
     override suspend fun markSendingIfEligible(
         id: Long,
+        staleSendingBeforeEpochMs: Long,
         status: DeliveryStatus,
         attemptedAtEpochMs: Long,
     ): Int = 0

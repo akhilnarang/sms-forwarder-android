@@ -34,11 +34,21 @@ interface ForwardRecordDao {
             lastAttemptedAtEpochMs = :attemptedAtEpochMs,
             lastError = NULL
         WHERE id = :id
-          AND status IN ('PENDING', 'FAILED', 'RETRYING')
+          AND (
+            status IN ('PENDING', 'FAILED', 'RETRYING')
+            OR (
+                status = 'SENDING'
+                AND (
+                    lastAttemptedAtEpochMs IS NULL
+                    OR lastAttemptedAtEpochMs < :staleSendingBeforeEpochMs
+                )
+            )
+          )
         """,
     )
     suspend fun markSendingIfEligible(
         id: Long,
+        staleSendingBeforeEpochMs: Long,
         status: DeliveryStatus = DeliveryStatus.SENDING,
         attemptedAtEpochMs: Long,
     ): Int

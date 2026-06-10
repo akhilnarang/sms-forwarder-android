@@ -10,7 +10,17 @@ object SmsParser {
             return null
         }
 
-        val messages = Telephony.Sms.Intents.getMessagesFromIntent(intent)
+        // A malformed intent/PDU can make this return null, return an empty array, or
+        // contain null elements. Parse defensively so a bad PDU yields null (skip)
+        // rather than crashing onReceive (which runs before goAsync and drops the broadcast).
+        val messages =
+            try {
+                Telephony.Sms.Intents.getMessagesFromIntent(intent)
+            } catch (_: Exception) {
+                null
+            }
+                ?.filterNotNull()
+                ?: return null
         if (messages.isEmpty()) {
             return null
         }

@@ -104,8 +104,16 @@ class ForwardRecordRepository(
         dao.updateStatus(id, DeliveryStatus.PENDING)
     }
 
-    override suspend fun markSendingIfEligible(id: Long, attemptedAtEpochMs: Long): Boolean =
-        dao.markSendingIfEligible(id = id, attemptedAtEpochMs = attemptedAtEpochMs) > 0
+    override suspend fun markSendingIfEligible(
+        id: Long,
+        attemptedAtEpochMs: Long,
+        staleSendingBeforeEpochMs: Long,
+    ): Boolean =
+        dao.markSendingIfEligible(
+            id = id,
+            attemptedAtEpochMs = attemptedAtEpochMs,
+            staleSendingBeforeEpochMs = staleSendingBeforeEpochMs,
+        ) > 0
 
     override suspend fun markFailed(id: Long, error: String) {
         dao.updateStatusWithError(

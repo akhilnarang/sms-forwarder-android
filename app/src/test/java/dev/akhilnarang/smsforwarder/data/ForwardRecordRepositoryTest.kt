@@ -45,23 +45,52 @@ class ForwardRecordRepositoryTest {
             payloadJson = "{}",
         )
 
+    /**
+     * Claims a record using a stale-SENDING cutoff older than the attempt timestamp,
+     * matching how [ForwardWorkExecutor] derives it. With this cutoff a freshly-claimed
+     * SENDING row is never treated as stale.
+     */
+    private suspend fun claim(id: Long, attemptedAtEpochMs: Long): Boolean =
+        repo.markSendingIfEligible(
+            id = id,
+            attemptedAtEpochMs = attemptedAtEpochMs,
+            staleSendingBeforeEpochMs = attemptedAtEpochMs - STALE_CUTOFF_SLACK_MS,
+        )
+
     @Test
     fun `markSendingIfEligible returns true for PENDING record`() = runTest {
         val id = insertPending()
-        assertTrue(repo.markSendingIfEligible(id, System.currentTimeMillis()))
+        assertTrue(claim(id, System.currentTimeMillis()))
     }
 
     @Test
-    fun `markSendingIfEligible returns false for SENDING record`() = runTest {
+    fun `markSendingIfEligible returns false for fresh SENDING record`() = runTest {
         val id = insertPending()
-        repo.markSendingIfEligible(id, System.currentTimeMillis())
-        assertFalse(repo.markSendingIfEligible(id, System.currentTimeMillis()))
+        val now = System.currentTimeMillis()
+        claim(id, now)
+        // Second claim shortly after: the SENDING row is not yet stale, so not reclaimable.
+        assertFalse(claim(id, now + 1))
+    }
+
+    @Test
+    fun `markSendingIfEligible reclaims a stale SENDING record`() = runTest {
+        val id = insertPending()
+        claim(id, 1000L)
+        // Cutoff in the future relative to the row's lastAttemptedAtEpochMs (1000L)
+        // marks the SENDING row as stale, so it becomes reclaimable.
+        assertTrue(
+            repo.markSendingIfEligible(
+                id = id,
+                attemptedAtEpochMs = 1_000_000L,
+                staleSendingBeforeEpochMs = 500_000L,
+            ),
+        )
     }
 
     @Test
     fun `markSent transitions record to SENT status`() = runTest {
         val id = insertPending()
-        repo.markSendingIfEligible(id, 1000L)
+        claim(id, 1000L)
         repo.markSent(id, 2000L, "OK")
         val record = repo.getById(id)!!
         assertEquals(DeliveryStatus.SENT, record.status)
@@ -71,7 +100,7 @@ class ForwardRecordRepositoryTest {
     @Test
     fun `markFailed transitions record to FAILED with error`() = runTest {
         val id = insertPending()
-        repo.markSendingIfEligible(id, 1000L)
+        claim(id, 1000L)
         repo.markFailed(id, "connection refused")
         val record = repo.getById(id)!!
         assertEquals(DeliveryStatus.FAILED, record.status)
@@ -81,7 +110,7 @@ class ForwardRecordRepositoryTest {
     @Test
     fun `markRetrying transitions record to RETRYING with error`() = runTest {
         val id = insertPending()
-        repo.markSendingIfEligible(id, 1000L)
+        claim(id, 1000L)
         repo.markRetrying(id, "timeout")
         val record = repo.getById(id)!!
         assertEquals(DeliveryStatus.RETRYING, record.status)
@@ -91,7 +120,7 @@ class ForwardRecordRepositoryTest {
     @Test
     fun `markPending resets a FAILED record back to PENDING`() = runTest {
         val id = insertPending()
-        repo.markSendingIfEligible(id, 1000L)
+        claim(id, 1000L)
         repo.markFailed(id, "network error")
         repo.markPending(id)
         val record = repo.getById(id)!!
@@ -102,15 +131,15 @@ class ForwardRecordRepositoryTest {
     @Test
     fun `markSendingIfEligible returns true for FAILED record`() = runTest {
         val id = insertPending()
-        repo.markSendingIfEligible(id, 1000L)
+        claim(id, 1000L)
         repo.markFailed(id, "error")
-        assertTrue(repo.markSendingIfEligible(id, 2000L))
+        assertTrue(claim(id, 2000L))
     }
 
     @Test
     fun `markSendingIfEligible increments attemptCount`() = runTest {
         val id = insertPending()
-        repo.markSendingIfEligible(id, 1000L)
+        claim(id, 1000L)
         val record = repo.getById(id)!!
         assertEquals(1, record.attemptCount)
     }
@@ -127,5 +156,9 @@ class ForwardRecordRepositoryTest {
         val id = insertPending()
         val record = repo.getById(id)!!
         assertTrue(record.isTestRecord)
+    }
+
+    private companion object {
+        const val STALE_CUTOFF_SLACK_MS = 60_000L
     }
 }

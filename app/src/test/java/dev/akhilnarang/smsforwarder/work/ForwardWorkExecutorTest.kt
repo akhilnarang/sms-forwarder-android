@@ -111,10 +111,53 @@ class ForwardWorkExecutorTest {
     }
 
     @Test
-    fun `unclaimed record returns FAILURE without forwarding`() = runTest {
-        val (executor, gateway) = makeExecutor(claimResult = false)
-        assertEquals(ForwardWorkExecutor.WorkResult.FAILURE, executor.execute(1L, 0))
+    fun `unclaimed record returns SUCCESS without forwarding`() = runTest {
+        // markSendingIfEligible returning false means the row is not actionable here
+        // (already SENT/IGNORED, or actively being sent by another worker). This run
+        // is a no-op and must retire successfully rather than failing or retrying.
+        var forwardCalls = 0
+        val (executor, gateway) = makeExecutor(
+            claimResult = false,
+            onForwardCalled = { forwardCalls++ },
+        )
+        assertEquals(ForwardWorkExecutor.WorkResult.SUCCESS, executor.execute(1L, 0))
         assertNull(gateway.lastStatusSet)
+        assertEquals(0, forwardCalls)
+    }
+
+    @Test
+    fun `claim passes a stale-sending cutoff in the past`() = runTest {
+        val gateway = RecordingGateway(baseRecord, claimResult = true)
+        val client = object : ForwardClientInterface {
+            override suspend fun forward(
+                record: ForwardRecordEntity,
+                endpointUrl: String,
+                authHeaderName: String,
+                authHeaderValue: String,
+            ): ForwardResult = ForwardResult.Success("OK")
+        }
+        val destDao = object : DestinationDao {
+            override fun getAll(): Flow<List<DestinationEntity>> = flowOf()
+            override suspend fun getById(id: Long): DestinationEntity? = baseDestination
+            override fun getEnabled(): Flow<List<DestinationEntity>> = flowOf(listOf(baseDestination))
+            override suspend fun getByIdIfEnabled(id: Long): DestinationEntity? = baseDestination
+            override suspend fun insert(destination: DestinationEntity): Long = 1L
+            override suspend fun update(destination: DestinationEntity) {}
+            override suspend fun delete(destination: DestinationEntity) {}
+            override suspend fun deleteAll() {}
+        }
+        val executor = ForwardWorkExecutor(gateway, client, DestinationRepository(destDao), null)
+
+        val before = System.currentTimeMillis()
+        executor.execute(1L, 0)
+        val after = System.currentTimeMillis()
+
+        val attemptedAt = gateway.lastAttemptedAtEpochMs
+        val staleCutoff = gateway.lastStaleSendingBeforeEpochMs
+        assertTrue(attemptedAt in before..after)
+        // Cutoff must sit strictly in the past relative to the attempt timestamp so a
+        // fresh in-flight SENDING row is never reclaimed out from under a live attempt.
+        assertTrue(staleCutoff < attemptedAt)
     }
 
     @Test
@@ -170,8 +213,18 @@ private class RecordingGateway(
 ) : ForwardRecordGateway {
     var lastStatusSet: DeliveryStatus? = null
     var lastError: String? = null
+    var lastAttemptedAtEpochMs: Long = 0L
+    var lastStaleSendingBeforeEpochMs: Long = 0L
 
-    override suspend fun markSendingIfEligible(id: Long, attemptedAtEpochMs: Long): Boolean = claimResult
+    override suspend fun markSendingIfEligible(
+        id: Long,
+        attemptedAtEpochMs: Long,
+        staleSendingBeforeEpochMs: Long,
+    ): Boolean {
+        lastAttemptedAtEpochMs = attemptedAtEpochMs
+        lastStaleSendingBeforeEpochMs = staleSendingBeforeEpochMs
+        return claimResult
+    }
 
     override suspend fun getById(id: Long): ForwardRecordEntity? = record
 

@@ -23,6 +23,10 @@ class SmsBroadcastReceiver : BroadcastReceiver() {
             try {
                 app.container.smsProcessor.handleIncomingSms(incomingSms)
                 Log.d(TAG, "Stored incoming SMS and scheduled forwarding.")
+            } catch (t: Throwable) {
+                // Never rethrow: an uncaught throw here would crash the process and
+                // silently drop the SMS. Log metadata only, never the body or sender.
+                Log.e(TAG, "Failed to handle incoming SMS; record may not have persisted.", t)
             } finally {
                 pendingResult.finish()
             }

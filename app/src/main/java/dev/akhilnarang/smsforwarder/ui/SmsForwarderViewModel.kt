@@ -50,24 +50,32 @@ class SmsForwarderViewModel(
     private val _deviceSmsMessages = MutableStateFlow<List<IncomingSms>>(emptyList())
     private val _smsSearchQuery = MutableStateFlow("")
 
+    private data class StoredData(
+        val rules: List<ForwardingRuleEntity>,
+        val destinations: List<DestinationEntity>,
+        val records: List<ForwardRecordEntity>,
+        val summary: ForwardSummary,
+    )
+
     val uiState: StateFlow<SmsForwarderUiState> =
         combine(
-            ruleRepository.getAllRules(),
-            destinationRepository.getAllDestinations(),
-            recordRepository.observeAll(),
-            recordRepository.observeSummary(),
+            combine(
+                ruleRepository.getAllRules(),
+                destinationRepository.getAllDestinations(),
+                recordRepository.observeAll(),
+                recordRepository.observeSummary(),
+            ) { rules, destinations, records, summary ->
+                StoredData(rules, destinations, records, summary)
+            },
             _feedbackMessage,
             _deviceSmsMessages,
             _smsSearchQuery
-        ) { args ->
-            val rules = args[0] as List<ForwardingRuleEntity>
-            val destinations = args[1] as List<DestinationEntity>
-            val records = args[2] as List<ForwardRecordEntity>
-            val summary = args[3] as ForwardSummary
-            val feedbackMessage = args[4] as String?
-            val deviceSmsMessages = args[5] as List<IncomingSms>
-            val smsSearchQuery = args[6] as String
-            
+        ) { stored, feedbackMessage, deviceSmsMessages, smsSearchQuery ->
+            val rules = stored.rules
+            val destinations = stored.destinations
+            val records = stored.records
+            val summary = stored.summary
+
             val filteredDeviceSms = if (smsSearchQuery.isBlank()) {
                 deviceSmsMessages
             } else {

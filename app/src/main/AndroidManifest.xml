@@ -7,6 +7,14 @@
     <uses-permission android:name="android.permission.READ_SMS" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
 
+    <!-- RECEIVE_SMS / READ_SMS imply telephony hardware. Declare it explicitly
+        as not required so Play doesn't filter the app on no-telephony devices
+        (e.g. ChromeOS); the app requests SMS permissions at runtime and degrades
+        gracefully where telephony is absent. -->
+    <uses-feature
+        android:name="android.hardware.telephony"
+        android:required="false" />
+
     <application
         android:name=".SmsForwarderApp"
         android:allowBackup="false"

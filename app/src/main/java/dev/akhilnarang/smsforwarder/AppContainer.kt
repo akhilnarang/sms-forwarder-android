@@ -13,19 +13,18 @@ import dev.akhilnarang.smsforwarder.network.SmsForwardClient
 import dev.akhilnarang.smsforwarder.sms.DeviceSmsScanner
 import dev.akhilnarang.smsforwarder.sms.SmsProcessor
 import dev.akhilnarang.smsforwarder.work.ForwardWorkScheduler
-import net.sqlcipher.database.SQLiteDatabase
-import net.sqlcipher.database.SupportFactory
+import net.zetetic.database.sqlcipher.SupportOpenHelperFactory
 
 class AppContainer(context: Context) {
     private val appContext = context.applicationContext
     private val database: AppDatabase
 
     init {
-        SQLiteDatabase.loadLibs(appContext)
+        System.loadLibrary("sqlcipher")
 
         val dbKeyProvider = DatabaseKeyProvider(appContext)
         val passphrase = dbKeyProvider.getOrCreatePassphrase()
-        val supportFactory = SupportFactory(passphrase)
+        val supportFactory = SupportOpenHelperFactory(passphrase)
 
         database =
             Room.databaseBuilder(appContext, AppDatabase::class.java, DB_NAME)

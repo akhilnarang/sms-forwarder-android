@@ -37,9 +37,9 @@
 # AndroidX Security (EncryptedSharedPreferences)
 -keep class androidx.security.crypto.** { *; }
 
-# SQLCipher
--keep class net.sqlcipher.** { *; }
--keep class net.sqlcipher.database.** { *; }
+# SQLCipher (net.zetetic:sqlcipher-android)
+-keep class net.zetetic.** { *; }
+-keep class net.zetetic.database.** { *; }
 
 # Keep BuildConfig
 -keep class dev.akhilnarang.smsforwarder.BuildConfig { *; }

@@ -158,6 +158,17 @@ class ForwardRecordRepositoryTest {
         assertTrue(record.isTestRecord)
     }
 
+    @Test
+    fun `getStaleSendingIds returns stale SENDING IDs and excludes fresh SENDING IDs`() = runTest {
+        val staleId = insertPending()
+        val freshId = insertPending()
+        claim(staleId, 1_000L)
+        claim(freshId, 10_000L)
+
+        val staleIds = repo.getStaleSendingIds(staleSendingBeforeEpochMs = 5_000L)
+        assertEquals(listOf(staleId), staleIds)
+    }
+
     private companion object {
         const val STALE_CUTOFF_SLACK_MS = 60_000L
     }

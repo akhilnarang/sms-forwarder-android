@@ -8,6 +8,7 @@ import dev.akhilnarang.smsforwarder.data.ForwardRecordEntity
 import dev.akhilnarang.smsforwarder.data.ForwardRecordGateway
 import dev.akhilnarang.smsforwarder.network.ForwardClientInterface
 import dev.akhilnarang.smsforwarder.network.ForwardResult
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.test.runTest
@@ -205,6 +206,46 @@ class ForwardWorkExecutorTest {
         assertEquals("Authorization", capturedHeaderName)
         assertEquals("Bearer token", capturedHeaderValue)
     }
+
+    @Test
+    fun `cancellation during forward marks RETRYING and rethrows`() = runTest {
+        val (executor, gateway) = makeExecutor(
+            onForwardCalled = { throw CancellationException("cancelled") },
+        )
+
+        var caught: CancellationException? = null
+        try {
+            executor.execute(1L, 0)
+        } catch (e: CancellationException) {
+            caught = e
+        }
+
+        assertTrue(caught != null)
+        assertEquals(DeliveryStatus.RETRYING, gateway.lastStatusSet)
+        assertEquals("Work cancelled; retrying", gateway.lastError)
+    }
+
+    @Test
+    fun `unexpected runtime exception below retry limit marks RETRYING and returns RETRY`() = runTest {
+        val (executor, gateway) = makeExecutor(
+            onForwardCalled = { throw RuntimeException("boom") },
+        )
+
+        assertEquals(ForwardWorkExecutor.WorkResult.RETRY, executor.execute(1L, 0))
+        assertEquals(DeliveryStatus.RETRYING, gateway.lastStatusSet)
+        assertEquals("boom", gateway.lastError)
+    }
+
+    @Test
+    fun `unexpected runtime exception at retry limit marks FAILED and returns FAILURE`() = runTest {
+        val (executor, gateway) = makeExecutor(
+            onForwardCalled = { throw RuntimeException("boom") },
+        )
+
+        assertEquals(ForwardWorkExecutor.WorkResult.FAILURE, executor.execute(1L, 4))
+        assertEquals(DeliveryStatus.FAILED, gateway.lastStatusSet)
+        assertEquals("boom", gateway.lastError)
+    }
 }
 
 private class RecordingGateway(
@@ -243,4 +284,6 @@ private class RecordingGateway(
     }
 
     override suspend fun countByStatus(status: DeliveryStatus): Int = 0
+
+    override suspend fun getStaleSendingIds(staleSendingBeforeEpochMs: Long): List<Long> = emptyList()
 }

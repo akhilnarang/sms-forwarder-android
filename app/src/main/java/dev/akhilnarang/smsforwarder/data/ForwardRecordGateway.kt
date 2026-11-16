@@ -11,4 +11,5 @@ interface ForwardRecordGateway {
     suspend fun markFailed(id: Long, error: String)
     suspend fun markRetrying(id: Long, error: String)
     suspend fun countByStatus(status: dev.akhilnarang.smsforwarder.data.DeliveryStatus): Int
+    suspend fun getStaleSendingIds(staleSendingBeforeEpochMs: Long): List<Long>
 }

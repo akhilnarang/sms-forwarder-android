@@ -2,10 +2,12 @@ package dev.akhilnarang.smsforwarder
 
 import android.app.Application
 import android.util.Log
+import dev.akhilnarang.smsforwarder.work.ForwardWorkExecutor
 import kotlinx.coroutines.CoroutineExceptionHandler
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.launch
 
 class SmsForwarderApp : Application() {
     // Defense-in-depth: any uncaught throwable in an applicationScope coroutine is
@@ -18,6 +20,18 @@ class SmsForwarderApp : Application() {
     val applicationScope =
         CoroutineScope(SupervisorJob() + Dispatchers.IO + coroutineExceptionHandler)
     val container by lazy { AppContainer(this) }
+
+    override fun onCreate() {
+        super.onCreate()
+        applicationScope.launch {
+            val staleBeforeEpochMs =
+                System.currentTimeMillis() - ForwardWorkExecutor.STALE_SENDING_THRESHOLD_MS
+            val staleIds = container.forwardRecordRepository.getStaleSendingIds(staleBeforeEpochMs)
+            staleIds.forEach { id ->
+                container.forwardWorkScheduler.enqueue(id)
+            }
+        }
+    }
 
     private companion object {
         const val TAG = "SmsForwarderApp"

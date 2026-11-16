@@ -91,6 +91,18 @@ interface ForwardRecordDao {
 
     @Query(
         """
+        SELECT id FROM forward_records
+        WHERE status = 'SENDING'
+          AND (
+            lastAttemptedAtEpochMs IS NULL
+            OR lastAttemptedAtEpochMs < :staleSendingBeforeEpochMs
+          )
+        """,
+    )
+    suspend fun getStaleSendingIds(staleSendingBeforeEpochMs: Long): List<Long>
+
+    @Query(
+        """
         SELECT
             COUNT(*) AS totalCount,
             COALESCE(SUM(CASE WHEN status != 'IGNORED' THEN 1 ELSE 0 END), 0) AS matchedCount,

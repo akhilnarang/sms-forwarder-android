@@ -136,4 +136,7 @@ class ForwardRecordRepository(
     }
 
     override suspend fun countByStatus(status: DeliveryStatus): Int = dao.countByStatus(status)
+
+    override suspend fun getStaleSendingIds(staleSendingBeforeEpochMs: Long): List<Long> =
+        dao.getStaleSendingIds(staleSendingBeforeEpochMs)
 }

@@ -235,4 +235,17 @@ private class RecordingForwardRecordDao : ForwardRecordDao {
 
     override suspend fun countByStatus(status: DeliveryStatus): Int =
         records.values.count { it.status == status }
+
+    override suspend fun getRecoverableRecordIds(staleSendingBeforeEpochMs: Long): List<Long> =
+        records.values
+            .filter { record ->
+                record.status == DeliveryStatus.PENDING ||
+                    record.status == DeliveryStatus.RETRYING ||
+                    (
+                        record.status == DeliveryStatus.SENDING &&
+                            (record.lastAttemptedAtEpochMs ?: Long.MIN_VALUE) <
+                            staleSendingBeforeEpochMs
+                    )
+            }
+            .map { record -> record.id }
 }

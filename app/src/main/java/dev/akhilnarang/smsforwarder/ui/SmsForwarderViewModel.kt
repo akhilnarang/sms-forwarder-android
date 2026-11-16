@@ -256,13 +256,12 @@ class SmsForwarderViewModel(
                 payloadFactory.buildPayloadFor(destination, sms, customKeysMap)
             } catch (e: Exception) {
                 Log.w("SmsForwarderViewModel", "Failed to build payload for rule ${rule.id}", e)
-                val failedId = recordRepository.insertManualIncoming(
+                recordRepository.insertFailedManualIncoming(
                     incomingSms = sms,
                     matchedRule = rule,
                     destinationId = destination.id,
-                    payloadJson = "",
+                    error = "Payload build failed: ${e.message}",
                 )
-                recordRepository.markFailed(failedId, "Payload build failed: ${e.message}")
                 _feedbackMessage.value = "Failed: Payload build failed"
                 return@launch
             }

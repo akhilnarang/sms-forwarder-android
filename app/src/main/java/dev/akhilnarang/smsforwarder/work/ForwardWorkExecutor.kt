@@ -29,13 +29,17 @@ class ForwardWorkExecutor(
         // markSendingIfEligible is the single authoritative gate: it atomically claims
         // any row that is PENDING/FAILED/RETRYING, or one stuck in SENDING longer than
         // STALE_SENDING_THRESHOLD_MS (recovering rows orphaned when the process died
-        // mid-send). If it returns false the row is genuinely not actionable here
-        // (already SENT/IGNORED, or another worker is actively sending it), so report
-        // SUCCESS to let WorkManager retire this run without a spurious failure/retry.
+        // mid-send). If it returns false the row is not claimable here, so the run must
+        // not forward it again. Report RETRY for a fresh SENDING row so the WorkManager
+        // backoff lands after the stale cutoff and reclaims it. Report SUCCESS for any
+        // other status (SENT, IGNORED, or missing) so the run retires quietly.
         val attemptedAtEpochMs = System.currentTimeMillis()
         val staleSendingBeforeEpochMs = attemptedAtEpochMs - STALE_SENDING_THRESHOLD_MS
         if (!recordGateway.markSendingIfEligible(recordId, attemptedAtEpochMs, staleSendingBeforeEpochMs)) {
-            return WorkResult.SUCCESS
+            return when (recordGateway.getById(recordId)?.status) {
+                DeliveryStatus.SENDING -> WorkResult.RETRY
+                else -> WorkResult.SUCCESS
+            }
         }
 
         return try {
@@ -126,6 +130,8 @@ class ForwardWorkExecutor(
         // likely died mid-send) and becomes re-claimable. Kept well above the worst-case
         // single HTTP attempt (connect + write + read timeouts in SmsForwardClient are
         // 15s each) so a still-live in-flight send is never reclaimed out from under itself.
-        internal const val STALE_SENDING_THRESHOLD_MS = 2 * 60 * 1000L
+        // The worker uses the same value as its minimum retry backoff, so a RETRY for a
+        // fresh SENDING row is re-eligible only after the cutoff.
+        const val STALE_SENDING_THRESHOLD_MS = 2 * 60 * 1000L
     }
 }

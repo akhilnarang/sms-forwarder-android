@@ -3,6 +3,7 @@ package dev.akhilnarang.smsforwarder.data
 import android.content.Context
 import androidx.room.Room
 import androidx.test.core.app.ApplicationProvider
+import dev.akhilnarang.smsforwarder.sms.IncomingSms
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.test.runTest
 import org.junit.After
@@ -159,17 +160,64 @@ class ForwardRecordRepositoryTest {
     }
 
     @Test
-    fun `getStaleSendingIds returns stale SENDING IDs and excludes fresh SENDING IDs`() = runTest {
+    fun `getRecoverableRecordIds returns only recoverable IDs`() = runTest {
+        val pendingId = insertPending()
+        val retryingId = insertPending()
+        claim(retryingId, 1_000L)
+        repo.markRetrying(retryingId, "timeout")
         val staleId = insertPending()
-        val freshId = insertPending()
         claim(staleId, 1_000L)
+        val freshId = insertPending()
         claim(freshId, 10_000L)
+        val sentId = insertPending()
+        claim(sentId, 1_000L)
+        repo.markSent(sentId, 2_000L, "OK")
+        val failedAtInsertId =
+            repo.insertFailedIncoming(
+                incomingSms = TEST_SMS,
+                matchedRule = null,
+                destinationId = null,
+                error = "Payload build failed: bad template",
+            )
+        val failedManualAtInsertId =
+            repo.insertFailedManualIncoming(
+                incomingSms = TEST_SMS,
+                matchedRule = null,
+                destinationId = null,
+                error = "Payload build failed: bad template",
+            )
 
-        val staleIds = repo.getStaleSendingIds(staleSendingBeforeEpochMs = 5_000L)
-        assertEquals(listOf(staleId), staleIds)
+        val recoverableIds = repo.getRecoverableRecordIds(staleSendingBeforeEpochMs = 5_000L)
+        assertEquals(setOf(pendingId, retryingId, staleId), recoverableIds.toSet())
+        assertFalse(recoverableIds.contains(failedAtInsertId))
+        assertFalse(recoverableIds.contains(failedManualAtInsertId))
+    }
+
+    @Test
+    fun `insertFailedIncoming stores empty payload FAILED record in one write`() = runTest {
+        val id =
+            repo.insertFailedIncoming(
+                incomingSms = TEST_SMS,
+                matchedRule = null,
+                destinationId = null,
+                error = "Payload build failed: bad template",
+            )
+        val record = repo.getById(id)!!
+        assertEquals(DeliveryStatus.FAILED, record.status)
+        assertEquals("", record.payloadJson)
+        assertEquals("Payload build failed: bad template", record.responseDetails)
     }
 
     private companion object {
         const val STALE_CUTOFF_SLACK_MS = 60_000L
+        val TEST_SMS =
+            IncomingSms(
+                senderRaw = "[TEST]",
+                senderNormalized = "[TEST]",
+                body = "test body",
+                receivedAtEpochMs = 1_000_000L,
+                subscriptionId = null,
+                multipart = false,
+            )
     }
 }

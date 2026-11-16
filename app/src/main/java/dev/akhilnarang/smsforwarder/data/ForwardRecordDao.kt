@@ -92,14 +92,17 @@ interface ForwardRecordDao {
     @Query(
         """
         SELECT id FROM forward_records
-        WHERE status = 'SENDING'
-          AND (
-            lastAttemptedAtEpochMs IS NULL
-            OR lastAttemptedAtEpochMs < :staleSendingBeforeEpochMs
+        WHERE status IN ('PENDING', 'RETRYING')
+          OR (
+            status = 'SENDING'
+            AND (
+                lastAttemptedAtEpochMs IS NULL
+                OR lastAttemptedAtEpochMs < :staleSendingBeforeEpochMs
+            )
           )
         """,
     )
-    suspend fun getStaleSendingIds(staleSendingBeforeEpochMs: Long): List<Long>
+    suspend fun getRecoverableRecordIds(staleSendingBeforeEpochMs: Long): List<Long>
 
     @Query(
         """

@@ -24,12 +24,13 @@ class SmsForwarderApp : Application() {
     override fun onCreate() {
         super.onCreate()
         applicationScope.launch {
-            val staleBeforeEpochMs =
+            val staleSendingBeforeEpochMs =
                 System.currentTimeMillis() - ForwardWorkExecutor.STALE_SENDING_THRESHOLD_MS
-            val staleIds = container.forwardRecordRepository.getStaleSendingIds(staleBeforeEpochMs)
-            staleIds.forEach { id ->
-                container.forwardWorkScheduler.enqueue(id)
-            }
+            val recoverableIds =
+                container.forwardRecordRepository.getRecoverableRecordIds(
+                    staleSendingBeforeEpochMs,
+                )
+            recoverableIds.forEach { id -> container.workScheduler.enqueue(id) }
         }
     }
 

@@ -55,24 +55,21 @@ class SmsProcessor(
                             payloadFactory.buildPayloadFor(destination, incomingSms, customKeysMap)
                         } catch (e: Exception) {
                             Log.w("SmsProcessor", "Failed to build payload for rule ${rule.id}", e)
-                            val failedId = forwardRecordRepository.insertIncoming(
+                            forwardRecordRepository.insertFailedIncoming(
                                 incomingSms = incomingSms,
                                 matchedRule = rule,
                                 destinationId = destinationId,
-                                payloadJson = "",
+                                error = "Payload build failed: ${e.message}",
                             )
-                            forwardRecordRepository.markFailed(failedId, "Payload build failed: ${e.message}")
                             return
                         }
                     } else {
-                        payloadJson = ""
-                        val failedId = forwardRecordRepository.insertIncoming(
+                        forwardRecordRepository.insertFailedIncoming(
                             incomingSms = incomingSms,
                             matchedRule = rule,
                             destinationId = destinationId,
-                            payloadJson = payloadJson,
+                            error = "Configured destination not found",
                         )
-                        forwardRecordRepository.markFailed(failedId, "Configured destination not found")
                         return
                     }
                     break

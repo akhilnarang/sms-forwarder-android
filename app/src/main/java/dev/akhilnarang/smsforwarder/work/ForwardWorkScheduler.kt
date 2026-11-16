@@ -37,8 +37,8 @@ open class ForwardWorkScheduler(
                 )
                 .setBackoffCriteria(
                     BackoffPolicy.EXPONENTIAL,
-                    1,
-                    TimeUnit.MINUTES,
+                    BACKOFF_DELAY_MS,
+                    TimeUnit.MILLISECONDS,
                 )
                 .build()
 
@@ -50,4 +50,10 @@ open class ForwardWorkScheduler(
     }
 
     private fun uniqueWorkName(recordId: Long): String = "forward-record-$recordId"
+
+    private companion object {
+        // Must stay at or above the stale-SENDING cutoff so a RETRY for a fresh SENDING
+        // row lands after the cutoff and the next run can reclaim it.
+        const val BACKOFF_DELAY_MS = ForwardWorkExecutor.STALE_SENDING_THRESHOLD_MS
+    }
 }

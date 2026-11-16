@@ -8,6 +8,7 @@ import dev.akhilnarang.smsforwarder.data.ForwardRecordEntity
 import dev.akhilnarang.smsforwarder.data.ForwardRecordGateway
 import dev.akhilnarang.smsforwarder.network.ForwardClientInterface
 import dev.akhilnarang.smsforwarder.network.ForwardResult
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.test.runTest
@@ -45,11 +46,12 @@ class ForwardWorkExecutorTest {
         record: ForwardRecordEntity? = baseRecord,
         destination: DestinationEntity? = baseDestination,
         claimResult: Boolean = true,
+        statusAfterRejectedClaim: DeliveryStatus? = null,
         forwardResult: ForwardResult = ForwardResult.Success("OK"),
         onForwardCalled: () -> Unit = {},
         onForwardConfig: (String, String, String) -> Unit = { _, _, _ -> },
     ): Pair<ForwardWorkExecutor, RecordingGateway> {
-        val gateway = RecordingGateway(record, claimResult)
+        val gateway = RecordingGateway(record, claimResult, statusAfterRejectedClaim)
         val client = object : ForwardClientInterface {
             override suspend fun forward(
                 record: ForwardRecordEntity,
@@ -121,6 +123,22 @@ class ForwardWorkExecutorTest {
             onForwardCalled = { forwardCalls++ },
         )
         assertEquals(ForwardWorkExecutor.WorkResult.SUCCESS, executor.execute(1L, 0))
+        assertNull(gateway.lastStatusSet)
+        assertEquals(0, forwardCalls)
+    }
+
+    @Test
+    fun `unclaimed fresh SENDING record returns RETRY without forwarding`() = runTest {
+        // A false claim on a fresh SENDING row means a live attempt owns it, or a
+        // retryNow REPLACE replaced this run. Retry so the backoff lands after the
+        // stale cutoff and the row becomes reclaimable.
+        var forwardCalls = 0
+        val (executor, gateway) = makeExecutor(
+            claimResult = false,
+            statusAfterRejectedClaim = DeliveryStatus.SENDING,
+            onForwardCalled = { forwardCalls++ },
+        )
+        assertEquals(ForwardWorkExecutor.WorkResult.RETRY, executor.execute(1L, 0))
         assertNull(gateway.lastStatusSet)
         assertEquals(0, forwardCalls)
     }
@@ -205,11 +223,52 @@ class ForwardWorkExecutorTest {
         assertEquals("Authorization", capturedHeaderName)
         assertEquals("Bearer token", capturedHeaderValue)
     }
+
+    @Test
+    fun `cancellation during forward marks RETRYING and rethrows`() = runTest {
+        val (executor, gateway) = makeExecutor(
+            onForwardCalled = { throw CancellationException("cancelled") },
+        )
+
+        var caught: CancellationException? = null
+        try {
+            executor.execute(1L, 0)
+        } catch (e: CancellationException) {
+            caught = e
+        }
+
+        assertTrue(caught != null)
+        assertEquals(DeliveryStatus.RETRYING, gateway.lastStatusSet)
+        assertEquals("Work cancelled; retrying", gateway.lastError)
+    }
+
+    @Test
+    fun `unexpected runtime exception below retry limit marks RETRYING and returns RETRY`() = runTest {
+        val (executor, gateway) = makeExecutor(
+            onForwardCalled = { throw RuntimeException("boom") },
+        )
+
+        assertEquals(ForwardWorkExecutor.WorkResult.RETRY, executor.execute(1L, 0))
+        assertEquals(DeliveryStatus.RETRYING, gateway.lastStatusSet)
+        assertEquals("boom", gateway.lastError)
+    }
+
+    @Test
+    fun `unexpected runtime exception at retry limit marks FAILED and returns FAILURE`() = runTest {
+        val (executor, gateway) = makeExecutor(
+            onForwardCalled = { throw RuntimeException("boom") },
+        )
+
+        assertEquals(ForwardWorkExecutor.WorkResult.FAILURE, executor.execute(1L, 4))
+        assertEquals(DeliveryStatus.FAILED, gateway.lastStatusSet)
+        assertEquals("boom", gateway.lastError)
+    }
 }
 
 private class RecordingGateway(
-    private val record: ForwardRecordEntity?,
+    private var record: ForwardRecordEntity?,
     private val claimResult: Boolean,
+    private val statusAfterRejectedClaim: DeliveryStatus? = null,
 ) : ForwardRecordGateway {
     var lastStatusSet: DeliveryStatus? = null
     var lastError: String? = null
@@ -223,6 +282,11 @@ private class RecordingGateway(
     ): Boolean {
         lastAttemptedAtEpochMs = attemptedAtEpochMs
         lastStaleSendingBeforeEpochMs = staleSendingBeforeEpochMs
+        if (!claimResult) {
+            statusAfterRejectedClaim?.let { status ->
+                record = record?.copy(status = status)
+            }
+        }
         return claimResult
     }
 
@@ -243,4 +307,7 @@ private class RecordingGateway(
     }
 
     override suspend fun countByStatus(status: DeliveryStatus): Int = 0
+
+    override suspend fun getRecoverableRecordIds(staleSendingBeforeEpochMs: Long): List<Long> =
+        emptyList()
 }

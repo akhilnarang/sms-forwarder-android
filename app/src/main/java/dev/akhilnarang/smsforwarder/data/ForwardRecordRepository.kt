@@ -16,10 +16,16 @@ class ForwardRecordRepository(
     suspend fun clearAll() = dao.deleteAll()
 
     /**
-     * Inserts an incoming SMS as a forward record.
+     * Inserts an incoming SMS as a forward record for delivery.
      *
-     * Pass an empty `payloadJson` only for records that are about to be marked FAILED
-     * (i.e. payload build failed before enqueue). These records must never be enqueued.
+     * Args:
+     *   incomingSms: The incoming SMS to store.
+     *   matchedRule: The rule that matched, or null when no rule matched.
+     *   destinationId: The destination of the matched rule.
+     *   payloadJson: The built forward payload.
+     *
+     * Returns:
+     *   The ID of the new record.
      */
     suspend fun insertIncoming(
         incomingSms: IncomingSms,
@@ -45,10 +51,54 @@ class ForwardRecordRepository(
         )
 
     /**
+     * Inserts an incoming SMS as a FAILED record in one database write.
+     *
+     * Use this when the payload build fails before enqueue. A single write stops the
+     * startup scan from selecting or recovering an intermediate PENDING record.
+     *
+     * Args:
+     *   incomingSms: The incoming SMS to store.
+     *   matchedRule: The rule that matched, or null when no rule matched.
+     *   destinationId: The destination of the matched rule.
+     *   error: The failure reason. Must not be empty.
+     *
+     * Returns:
+     *   The ID of the new FAILED record.
+     */
+    suspend fun insertFailedIncoming(
+        incomingSms: IncomingSms,
+        matchedRule: ForwardingRuleEntity?,
+        destinationId: Long?,
+        error: String,
+    ): Long =
+        dao.insert(
+            ForwardRecordEntity(
+                senderRaw = incomingSms.senderRaw,
+                senderNormalized = incomingSms.senderNormalized,
+                messageBody = incomingSms.body,
+                receivedAtEpochMs = incomingSms.receivedAtEpochMs,
+                subscriptionId = incomingSms.subscriptionId,
+                multipart = incomingSms.multipart,
+                payloadJson = "",
+                destinationId = destinationId,
+                status = DeliveryStatus.FAILED,
+                statusReason = matchedRule?.let { "Matched rule: ${it.label}" }
+                    ?: "Rule not matched",
+                responseDetails = error,
+            ),
+        )
+
+    /**
      * Inserts a manually selected incoming SMS as a forward record.
      *
-     * Pass an empty `payloadJson` only for records that are about to be marked FAILED
-     * (i.e. payload build failed before enqueue). These records must never be enqueued.
+     * Args:
+     *   incomingSms: The incoming SMS to store.
+     *   matchedRule: The rule used for the manual forward.
+     *   destinationId: The destination of that rule.
+     *   payloadJson: The built forward payload.
+     *
+     * Returns:
+     *   The ID of the new record.
      */
     suspend fun insertManualIncoming(
         incomingSms: IncomingSms,
@@ -74,9 +124,56 @@ class ForwardRecordRepository(
         )
 
     /**
+     * Inserts a manually selected incoming SMS as a FAILED record in one database write.
+     *
+     * Use this when the payload build fails before enqueue. A single write stops the
+     * startup scan from selecting or recovering an intermediate PENDING record.
+     *
+     * Args:
+     *   incomingSms: The incoming SMS to store.
+     *   matchedRule: The rule used for the manual forward.
+     *   destinationId: The destination of that rule.
+     *   error: The failure reason. Must not be empty.
+     *
+     * Returns:
+     *   The ID of the new FAILED record.
+     */
+    suspend fun insertFailedManualIncoming(
+        incomingSms: IncomingSms,
+        matchedRule: ForwardingRuleEntity?,
+        destinationId: Long?,
+        error: String,
+    ): Long =
+        dao.insert(
+            ForwardRecordEntity(
+                senderRaw = incomingSms.senderRaw,
+                senderNormalized = incomingSms.senderNormalized,
+                messageBody = incomingSms.body,
+                receivedAtEpochMs = incomingSms.receivedAtEpochMs,
+                subscriptionId = incomingSms.subscriptionId,
+                multipart = incomingSms.multipart,
+                payloadJson = "",
+                destinationId = destinationId,
+                status = DeliveryStatus.FAILED,
+                statusReason = matchedRule?.let { "Manually forwarded from device SMS: ${it.label}" }
+                    ?: "Manually forwarded from device SMS inbox",
+                responseDetails = error,
+            ),
+        )
+
+    /**
      * Inserts a synthetic test record that is clearly marked as non-real.
-     * The returned ID should be enqueued via [ForwardWorkScheduler] to exercise the full
-     * forwarding path without waiting for real SMS.
+     *
+     * The caller must enqueue the returned ID to exercise the full forwarding path.
+     *
+     * Args:
+     *   senderTag: The synthetic sender label.
+     *   messageBody: The synthetic message body.
+     *   receivedAtEpochMs: The receive time to store.
+     *   payloadJson: The payload to store.
+     *
+     * Returns:
+     *   The ID of the new test record.
      */
     suspend fun insertTestRecord(
         senderTag: String,
@@ -136,4 +233,7 @@ class ForwardRecordRepository(
     }
 
     override suspend fun countByStatus(status: DeliveryStatus): Int = dao.countByStatus(status)
+
+    override suspend fun getRecoverableRecordIds(staleSendingBeforeEpochMs: Long): List<Long> =
+        dao.getRecoverableRecordIds(staleSendingBeforeEpochMs)
 }

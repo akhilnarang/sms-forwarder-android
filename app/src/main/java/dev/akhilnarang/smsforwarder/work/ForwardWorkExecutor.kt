@@ -5,6 +5,9 @@ import dev.akhilnarang.smsforwarder.data.DestinationRepository
 import dev.akhilnarang.smsforwarder.data.ForwardRecordGateway
 import dev.akhilnarang.smsforwarder.network.ForwardClientInterface
 import dev.akhilnarang.smsforwarder.util.NotificationHelper
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.NonCancellable
+import kotlinx.coroutines.withContext
 
 import org.json.JSONObject
 
@@ -26,64 +29,85 @@ class ForwardWorkExecutor(
         // markSendingIfEligible is the single authoritative gate: it atomically claims
         // any row that is PENDING/FAILED/RETRYING, or one stuck in SENDING longer than
         // STALE_SENDING_THRESHOLD_MS (recovering rows orphaned when the process died
-        // mid-send). If it returns false the row is genuinely not actionable here
-        // (already SENT/IGNORED, or another worker is actively sending it), so report
-        // SUCCESS to let WorkManager retire this run without a spurious failure/retry.
+        // mid-send). If it returns false the row is not claimable here, so the run must
+        // not forward it again. Report RETRY for a fresh SENDING row so the WorkManager
+        // backoff lands after the stale cutoff and reclaims it. Report SUCCESS for any
+        // other status (SENT, IGNORED, or missing) so the run retires quietly.
         val attemptedAtEpochMs = System.currentTimeMillis()
         val staleSendingBeforeEpochMs = attemptedAtEpochMs - STALE_SENDING_THRESHOLD_MS
         if (!recordGateway.markSendingIfEligible(recordId, attemptedAtEpochMs, staleSendingBeforeEpochMs)) {
-            return WorkResult.SUCCESS
+            return when (recordGateway.getById(recordId)?.status) {
+                DeliveryStatus.SENDING -> WorkResult.RETRY
+                else -> WorkResult.SUCCESS
+            }
         }
 
-        if (record.destinationId == null) {
-            recordGateway.markFailed(recordId, "No destination configured for this record")
-            return WorkResult.FAILURE
-        }
-        val destination = destinationRepository.getEnabledDestinationById(record.destinationId)
-            ?: run {
-                recordGateway.markFailed(recordId, "Destination is missing or disabled")
+        return try {
+            if (record.destinationId == null) {
+                recordGateway.markFailed(recordId, "No destination configured for this record")
                 return WorkResult.FAILURE
             }
+            val destination = destinationRepository.getEnabledDestinationById(record.destinationId)
+                ?: run {
+                    recordGateway.markFailed(recordId, "Destination is missing or disabled")
+                    return WorkResult.FAILURE
+                }
 
-        var url = destination.endpointUrl
-        var headerName = destination.authHeaderName ?: ""
-        var headerValue = destination.authHeaderValue ?: ""
+            var url = destination.endpointUrl
+            var headerName = destination.authHeaderName ?: ""
+            var headerValue = destination.authHeaderValue ?: ""
 
-        if (destination.type == dev.akhilnarang.smsforwarder.data.DestinationType.TELEGRAM_PRESET) {
-            try {
-                val config = JSONObject(destination.configJson ?: "{}")
-                val botToken = config.optString("botToken", "")
-                url = "https://api.telegram.org/bot${botToken}/sendMessage"
-                headerName = "Content-Type"
-                headerValue = "application/json"
-            } catch (e: Exception) { }
-        }
-        
-        // Use the exact payload saved in the record during SmsProcessor
-        val payloadToSend = record.payloadJson
-
-        // Pass the updated payload inside the record
-        val modifiedRecord = record.copy(payloadJson = payloadToSend)
-
-        val result = forwardClient.forward(modifiedRecord, url, headerName, headerValue)
-
-        return when (result) {
-            is dev.akhilnarang.smsforwarder.network.ForwardResult.Success -> {
-                recordGateway.markSent(recordId, System.currentTimeMillis(), result.responseDetails)
-                WorkResult.SUCCESS
+            if (destination.type == dev.akhilnarang.smsforwarder.data.DestinationType.TELEGRAM_PRESET) {
+                try {
+                    val config = JSONObject(destination.configJson ?: "{}")
+                    val botToken = config.optString("botToken", "")
+                    url = "https://api.telegram.org/bot${botToken}/sendMessage"
+                    headerName = "Content-Type"
+                    headerValue = "application/json"
+                } catch (e: Exception) { }
             }
-            is dev.akhilnarang.smsforwarder.network.ForwardResult.RetryableFailure -> {
-                if (runAttemptCount < MAX_RETRIES) {
-                    recordGateway.markRetrying(recordId, result.message)
-                    WorkResult.RETRY
-                } else {
+
+            // Use the exact payload saved in the record during SmsProcessor
+            val payloadToSend = record.payloadJson
+
+            // Pass the updated payload inside the record
+            val modifiedRecord = record.copy(payloadJson = payloadToSend)
+
+            val result = forwardClient.forward(modifiedRecord, url, headerName, headerValue)
+
+            when (result) {
+                is dev.akhilnarang.smsforwarder.network.ForwardResult.Success -> {
+                    recordGateway.markSent(recordId, System.currentTimeMillis(), result.responseDetails)
+                    WorkResult.SUCCESS
+                }
+                is dev.akhilnarang.smsforwarder.network.ForwardResult.RetryableFailure -> {
+                    if (runAttemptCount < MAX_RETRIES) {
+                        recordGateway.markRetrying(recordId, result.message)
+                        WorkResult.RETRY
+                    } else {
+                        recordGateway.markFailed(recordId, result.message)
+                        notifyFailure()
+                        WorkResult.FAILURE
+                    }
+                }
+                is dev.akhilnarang.smsforwarder.network.ForwardResult.PermanentFailure -> {
                     recordGateway.markFailed(recordId, result.message)
                     notifyFailure()
                     WorkResult.FAILURE
                 }
             }
-            is dev.akhilnarang.smsforwarder.network.ForwardResult.PermanentFailure -> {
-                recordGateway.markFailed(recordId, result.message)
+        } catch (e: CancellationException) {
+            withContext(NonCancellable) {
+                recordGateway.markRetrying(recordId, "Work cancelled; retrying")
+            }
+            throw e
+        } catch (e: Exception) {
+            val errorMessage = e.message ?: "Unexpected error"
+            if (runAttemptCount < MAX_RETRIES) {
+                recordGateway.markRetrying(recordId, errorMessage)
+                WorkResult.RETRY
+            } else {
+                recordGateway.markFailed(recordId, errorMessage)
                 notifyFailure()
                 WorkResult.FAILURE
             }
@@ -106,6 +130,8 @@ class ForwardWorkExecutor(
         // likely died mid-send) and becomes re-claimable. Kept well above the worst-case
         // single HTTP attempt (connect + write + read timeouts in SmsForwardClient are
         // 15s each) so a still-live in-flight send is never reclaimed out from under itself.
-        private const val STALE_SENDING_THRESHOLD_MS = 2 * 60 * 1000L
+        // The worker uses the same value as its minimum retry backoff, so a RETRY for a
+        // fresh SENDING row is re-eligible only after the cutoff.
+        const val STALE_SENDING_THRESHOLD_MS = 2 * 60 * 1000L
     }
 }
